@@ -71,6 +71,16 @@ python scripts/run_alphas.py --rank cross_section --universe full_a
   ~half flip sign vs their 2010–2017 orientation. 170 valid factors, correlation
   pruning 170→66. Tables 7/8 + Figs 9-20 in `report/`.
 
+* **§3.4.2 / §3.4.3 model IC — DONE on full-A** (`src/model_ic.py`,
+  `scripts/run_model_ic.py`). Combined-alpha-model IC, streamed off the memmap;
+  ridge-stabilised multivariate factor-return fit. Table 9: model IC **0.115**,
+  t **65.8**, **win rate 95.1%** (report 0.057 / 18.23 / 88.7% — win rate exceeds
+  the report). Table 10: model IC rises monotonically with factor count (0.090 at
+  20 → 0.115 at 170, diminishing returns) — reproduces §3.4.3. Figs 21/22. Note the
+  §3.4.1-vs-§3.4.2 contrast: single-factor signed returns ≈ 0 OOS (signs flip), yet
+  the adaptive combined model keeps IC 0.115 / win 95% because it re-estimates
+  factor returns each period and doesn't rely on the alphas' original signs.
+
 ### Memory note (16 GB machine)
 
 Full-A (5103 stocks × 2183 days × 189 alphas) is ~8.4 GB as a float32 signal
