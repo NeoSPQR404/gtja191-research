@@ -68,7 +68,7 @@ def tables(fr, ir):
     t8 = pd.DataFrame({
         f"DAY{d}": [f"{ir[d].mean():.2f}", f"{ir[d].abs().mean():.2f}", f"{REPORT_IR[d]:.2f}"]
         for d in h
-    }, index=["本次复现 IR均值 (signed)", "本次复现 |IR|均值", "研报 IR均值"])
+    }, index=["本次复现 IR 均值 (signed)", "本次复现 IR 均值 (abs)", "研报 IR均值"])
     t7.to_csv(os.path.join(config.TABLE_DIR, "table7_mean_factor_return.csv"))
     t8.to_csv(os.path.join(config.TABLE_DIR, "table8_mean_IR.csv"))
     with open(os.path.join(config.TABLE_DIR, "tables_7_8.md"), "w") as f:
