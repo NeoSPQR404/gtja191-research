@@ -3,6 +3,9 @@
 Reproduction of 国泰君安《数量化专题之九十三：基于短周期价量特征的多因子选股体系》
 (the 191-alpha short-period price-volume system), on tushare data.
 
+> **📄 一页总结见 [SUMMARY.md](SUMMARY.md)** — 全流程 §3.3–§3.6 + 可交易性深挖链
+> （隔夜诊断 → 多空 → 最优持有 7 日 → 市场中性 → 换手拐点）、关键数据、图表索引、工程说明。
+
 * **Reference**: `../gtja191-reference/` — the report PDF + MSCI *Barra CNE5S Model
   Descriptor* (descriptor weights).
 * **Data**: read-only panel from `../gtja191-tushare-data/data/` (2017–2025), plus
