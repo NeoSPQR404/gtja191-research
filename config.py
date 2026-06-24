@@ -107,6 +107,19 @@ STYLE_FACTORS = list(CNE5S_WEIGHTS.keys())
 # BARRA descriptor estimation parameters (report appendix 1 values; the report
 # uses 沪深300 + half-life 60/120/40, which differ slightly from MSCI's
 # 252/126/42 — we follow the report's appendix-1 numbers).
+# ---------------------------------------------------------------- §3.6 strategy
+CSI500_RAW = os.path.join(LOCAL_RAW, "index_daily_000905.SH.parquet")
+CSI500_WEIGHT = os.path.join(LOCAL_RAW, "index_weight_000905.SH.parquet")
+NAMECHANGE = os.path.join(LOCAL_RAW, "namechange.parquet")
+
+STRAT_TC = 0.003            # round-trip cost (report: 0.1% commission + 0.1% stamp)
+STRAT_REB_FREQ = 2          # rebalance every N trading days (report horizon t=2)
+STRAT_STYLE_BOUND = 0.1     # |(w-w_bench)·style| ≤ 0.1 (report §3.6.2)
+STRAT_IND_BOUND = 0.05      # |(w-w_bench)·industry| ≤ 5% (report §3.6.2, abs interp)
+STRAT_MAX_UNIVERSE = 1500   # liquidity-capped optimisation universe (tractability)
+STRAT_MAX_WEIGHT = 0.05     # per-stock weight cap (diversification; report holds ~52)
+STRAT_TC_SWEEP = [0.003, 0.004, 0.005, 0.006, 0.007, 0.008, 0.009, 0.010]
+
 BETA_WINDOW, BETA_HALFLIFE = 250, 60
 RSTR_T, RSTR_LAG, RSTR_HALFLIFE = 500, 21, 120
 DASTD_WINDOW, DASTD_HALFLIFE = 250, 40

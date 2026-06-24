@@ -81,6 +81,20 @@ python scripts/run_alphas.py --rank cross_section --universe full_a
   the adaptive combined model keeps IC 0.115 / win 95% because it re-estimates
   factor returns each period and doesn't rely on the alphas' original signs.
 
+* **§3.5 / §3.6 strategy backtest — DONE on full-A** (`src/strategy.py`,
+  `scripts/{export_predictions,run_strategy}.py`). Style/industry-neutral long-only
+  portfolio vs CSI500, scipy-HiGHS LP `max w·Ê(α) − Tc·|w−w_prev|` with style ±0.1 /
+  industry ±5% / per-name ≤5% / budget 1; next-day-open execution, Tc 0.3%, ex-ST
+  (point-in-time namechange), suspended/limit excluded. **Out-of-sample result is
+  negative: annual excess −24.5%, IR −1.59** (report +50.2% / 4.67). The key
+  diagnostic (fig27): the combined-alpha IC decomposes into **+0.229 on the
+  (untradable) overnight gap vs −0.012 on the (tradable) intraday move** — the
+  GTJA-191 price-volume signal lives almost entirely in the close→next-open gap,
+  so realistic next-open execution captures ~0/negative edge. This reconciles the
+  high §3.4 model IC (0.115, close-to-close) with the failing strategy. Tables
+  11/12 + Figs 23-27. (Tc sensitivity §3.6.3 is degenerate for a zero-edge strategy;
+  `--sweep` available.)
+
 ### Memory note (16 GB machine)
 
 Full-A (5103 stocks × 2183 days × 189 alphas) is ~8.4 GB as a float32 signal

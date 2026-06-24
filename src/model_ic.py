@@ -117,6 +117,72 @@ def compute_model_ic_multi_memmap(mmap_dir, style_long, industry_map, close_wide
     return {name: pd.Series(dict(recs)).sort_index() for name, recs in ic_recs.items()}
 
 
+def export_predictions_memmap(mmap_dir, style_long, industry_map, close_wide,
+                              factor_cols=None, T=None, min_T=None, log_every=400):
+    """Stream the combined-model forecast Ê(ω_{t+1}) = X̃_t · f̄ for EVERY tradable
+    stock each day (point-in-time: f̄ = trailing-T mean of realised factor returns
+    f_s, s<t). Returns a long DataFrame [trade_date, ts_code, pred] — the §3.6
+    optimiser's expected-alpha objective. Uses the ridge fit, all valid factors."""
+    T = T or config.MODEL_IC_WINDOW
+    min_T = min_T or config.MODEL_IC_MIN_WINDOW
+    meta = np.load(os.path.join(mmap_dir, "meta.npz"), allow_pickle=True)
+    dates = meta["dates"].astype(str)
+    codes = meta["codes"].astype(str)
+    valid = meta["valid"]
+    Tn, N, K = int(meta["T"]), int(meta["N"]), int(meta["K"])
+    ids = meta["alpha_ids"].tolist()
+    alpha_cols = [f"alpha{i}" for i in ids]
+    col_idx = {c: i for i, c in enumerate(alpha_cols)}
+    if factor_cols is None:
+        factor_cols = alpha_cols
+    fidx = np.array([col_idx[c] for c in factor_cols if c in col_idx])
+    mm = np.memmap(os.path.join(mmap_dir, "signals.f32"), dtype=np.float32, mode="r",
+                   shape=(Tn * N, K))
+    uni = list(codes)
+    ind_arr = _industry_dummies(industry_map, uni).to_numpy()
+    cw = close_wide.reindex(index=dates, columns=uni)
+    fwd1 = (cw.shift(-1) / cw - 1.0).to_numpy()
+    sl = style_long.set_index(["trade_date", "ts_code"])
+    style_arr = {s: sl[s].unstack("ts_code").reindex(index=dates, columns=uni).to_numpy()
+                 for s in config.STYLE_FACTORS}
+    codes_arr = np.asarray(uni)
+
+    buf, recs = [], []
+    for j in range(Tn):
+        sel = valid[j * N:(j + 1) * N]
+        if sel.sum() < config.MIN_CROSS_SECTION:
+            continue
+        Y = np.asarray(mm[j * N:(j + 1) * N], dtype=float)[sel]
+        st = np.nan_to_num(_winsor_standardize(
+            np.column_stack([style_arr[s][j][sel] for s in config.STYLE_FACTORS])), nan=0.0)
+        Zind = ind_arr[sel]
+        Zind = Zind[:, Zind.sum(0) > 0]
+        Z = np.hstack([Zind, st])
+        Xt = np.nan_to_num(_winsor_standardize(_orthogonalize(_winsor_standardize(Y), Z)), nan=0.0)
+        Xs = Xt[:, fidx]                                  # exposures, ALL valid stocks
+        # point-in-time forecast from PAST factor returns
+        if len(buf) >= min_T:
+            E = Xs @ np.mean(buf, axis=0)
+            sel_codes = codes_arr[sel]
+            for cc, e in zip(sel_codes, E):
+                recs.append((dates[j], cc, e))
+        # update buffer with this date's realised factor returns (ridge on masked)
+        r = fwd1[j][sel]
+        mask = np.isfinite(r)
+        if mask.sum() >= config.MIN_CROSS_SECTION:
+            rr = r[mask]
+            wcoef, *_ = np.linalg.lstsq(Z[mask], rr, rcond=None)
+            omega = rr - Z[mask] @ wcoef
+            Xm = Xs[mask]
+            f_t = _ridge_solve(Xm, omega, config.MODEL_IC_RIDGE * mask.sum())
+            buf.append(f_t)
+            if len(buf) > T:
+                buf.pop(0)
+        if log_every and (j + 1) % log_every == 0:
+            print(f"  predict {j+1}/{Tn} dates", flush=True)
+    return pd.DataFrame(recs, columns=["trade_date", "ts_code", "pred"])
+
+
 def ic_stats(ic):
     """Mean IC, model t-stat (mean/std·√N), daily win rate."""
     ic = ic.dropna()
