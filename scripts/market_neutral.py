@@ -178,7 +178,42 @@ def main():
                  textcoords="offset points", xytext=(6, -28), fontsize=10, color=RED)
     ax1.set_title("图32 换手率拐点: 年化收益/IR vs 单次换手上限 [越紧→成本越省, 信号越稀]")
     fig.tight_layout(); fig.savefig(os.path.join(config.FIGURE_DIR, "fig32_turnover_inflection.png"), dpi=130, bbox_inches="tight"); plt.close(fig)
+
+    # fig33: HIGHEST-RETURN turnover tier vs benchmark index (CSI500)
+    best_name = max(results, key=lambda r: r[1])[0]            # r[1] = annual return
+    bdd = navs[best_name]; s = stats(bdd)
+    mr = bdd["mkt_ret"]; m_ann = mr.mean() * Y; m_vol = mr.std() * np.sqrt(Y)
+    m_nav = bdd["nav_mkt"]; m_mdd = (m_nav / m_nav.cummax() - 1).min()
+    corr = bdd["ls_ret"].corr(bdd["mkt_ret"])
+    bdd[["trade_date", "nav_ls", "nav_mkt", "ls_ret", "mkt_ret"]].to_parquet(
+        os.path.join(config.CACHE_DIR, "market_neutral_best.parquet"), index=False)
+    cmp = pd.DataFrame({
+        f"市场中性多空 ({best_name})": [f"{s['ann']*100:+.1f}%", f"{s['vol']*100:.1f}%",
+                                  f"{s['ir']:.2f}", f"{s['mdd']*100:.1f}%", f"{s['win']*100:.1f}%"],
+        "中证500 (基准)": [f"{m_ann*100:+.1f}%", f"{m_vol*100:.1f}%", f"{m_ann/m_vol:.2f}",
+                        f"{m_mdd*100:.1f}%", "—"]},
+        index=["年化收益", "年化波动", "夏普/IR", "最大回撤", "日胜率"])
+    cmp.to_csv(os.path.join(config.TABLE_DIR, "market_neutral_best.csv"))
+    with open(os.path.join(config.TABLE_DIR, "market_neutral_best.md"), "w") as f:
+        f.write(f"### 收益最高换手档 ({best_name}) 市场中性多空 vs 中证500 (2017-2025)\n\n")
+        f.write(cmp.to_markdown() + f"\n\n_与中证500 日收益相关性 = {corr:+.2f}（≈0 = 市场中性）_\n")
+
+    fig, ax = plt.subplots(figsize=(11, 4.8))
+    x = pd.to_datetime([str(v) for v in bdd["trade_date"]], format="%Y%m%d")
+    ax.plot(x, bdd["nav_ls"], color=GREEN, lw=2,
+            label=f"市场中性多空 {best_name}（最高收益档）: 年化{s['ann']*100:+.1f}%  波动{s['vol']*100:.0f}%  "
+                  f"回撤{s['mdd']*100:.0f}%  IR{s['ir']:.2f}")
+    ax.plot(x, bdd["nav_mkt"], color=GREY, lw=1.6, ls="--",
+            label=f"中证500（基准）: 年化{m_ann*100:+.1f}%  波动{m_vol*100:.0f}%  回撤{m_mdd*100:.0f}%")
+    ax.axhline(1, color="grey", lw=0.5)
+    ax.set_ylabel("累计净值"); ax.set_title(
+        f"图33 收益最高换手档({best_name})市场中性多空 vs 中证500 [日收益相关性≈{corr:+.2f}]")
+    ax.legend(loc="upper left", fontsize=9); ax.grid(alpha=0.25)
+    fig.tight_layout(); fig.savefig(os.path.join(config.FIGURE_DIR, "fig33_best_vs_benchmark.png"), dpi=130, bbox_inches="tight"); plt.close(fig)
+
     print(fmt.to_string()); print(f"\n拐点(IR最大) = {labels[best_i]}  IR={irs[best_i]:.2f}  年化={anns[best_i]:.1f}%")
+    print(f"收益最高档 = {best_name}: 年化{s['ann']*100:+.1f}% IR{s['ir']:.2f} 回撤{s['mdd']*100:.0f}% | "
+          f"中证500 年化{m_ann*100:+.1f}% 回撤{m_mdd*100:.0f}% | 相关性{corr:+.2f}")
 
 
 if __name__ == "__main__":
