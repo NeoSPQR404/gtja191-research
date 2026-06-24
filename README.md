@@ -89,11 +89,16 @@ python scripts/run_alphas.py --rank cross_section --universe full_a
   negative: annual excess −24.5%, IR −1.59** (report +50.2% / 4.67). The key
   diagnostic (fig27): the combined-alpha IC decomposes into **+0.229 on the
   (untradable) overnight gap vs −0.012 on the (tradable) intraday move** — the
-  GTJA-191 price-volume signal lives almost entirely in the close→next-open gap,
-  so realistic next-open execution captures ~0/negative edge. This reconciles the
-  high §3.4 model IC (0.115, close-to-close) with the failing strategy. Tables
-  11/12 + Figs 23-27. (Tc sensitivity §3.6.3 is degenerate for a zero-edge strategy;
-  `--sweep` available.)
+  GTJA-191 price-volume signal lives mostly in the close→next-open gap, so realistic
+  next-open execution misses that night. BUT the gap predictability decays into the
+  *next* night, so holding open→open recovers a tradable signal: **decile long-short
+  open-to-open IR +4.56 ≈ the report's 4.67** (fig28) — the signal strength IS
+  reproduced OOS. It's just **short-sided** (identifies losers > winners), so a
+  long-only book (the report's construction, A-share short constraint) can't capture
+  it: top-N long-only after cost is −12% to −42%, and the neutralized optimizer −24.5%.
+  The signal lives in (overnight + short side), not in (long-only tradable cross-
+  section). (next-open split-day execution ≡ open-to-open for a 2-day hold, so both
+  give −24.5%.) Tables 11/12 + Figs 23-28. (Tc sweep §3.6.3 degenerate; `--sweep`.)
 
 ### Memory note (16 GB machine)
 

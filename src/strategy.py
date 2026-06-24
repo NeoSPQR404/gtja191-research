@@ -101,9 +101,14 @@ def optimize_weights(codes, pred, Xstyle, ind_labels, w_bench, w_prev,
 # ---------------------------------------------------------------- backtester
 def backtest(pred_long, style_long, industry_map, panel, csi500_daily, csi500_weight,
              namechange, Tc=0.003, reb_freq=2, style_bound=0.1, ind_bound=0.05,
-             max_universe=1500, log_every=100):
+             max_universe=1500, log_every=100, execution="open_close"):
     """Run the strategy. Returns (daily df[nav, bench_nav, port_ret, bench_ret,
-    excess], rebalance df[date, turnover, n_holdings])."""
+    excess], rebalance df[date, turnover, n_holdings]).
+
+    execution: "open_close" — buy at next-day open, the entry day contributes its
+    open→close move (no overnight look-ahead); thereafter close-to-close.
+    "open_open" — hold open→open each day (spans the next overnight, where the
+    GTJA price-volume signal partly survives). Benchmark return matched per mode."""
     p = panel.sort_values(["ts_code", "trade_date"]).copy()
     adj = p["adj_factor"]
     p["open_hfq"] = p["open"] * adj
@@ -134,6 +139,64 @@ def backtest(pred_long, style_long, industry_map, panel, csi500_daily, csi500_we
 
     code_index = pd.Index(codes_all)
     reb_idx = set(range(0, len(dates) - 1, reb_freq))           # decide at r, exec r+1
+
+    def _decide(j, w_prev_series):
+        """Solve the optimiser at close j (execute next open); return target w or None."""
+        de = j + 1
+        st_set = is_st_on(st_iv, dates[j])
+        tradable = ((~suspended.iloc[j]) & (~suspended.iloc[de]) & pred_w.iloc[j].notna()).to_numpy()
+        tradable &= ~code_index.isin(st_set)
+        cand = code_index[tradable]
+        bw = bench_w.get(dates[de], pd.Series(dtype=float))
+        members = [c for c in bw.index if c in set(cand)]
+        liq = trad_amt.iloc[j].reindex(cand).fillna(0).sort_values(ascending=False)
+        uni = sorted(set(members) | set(liq.head(max_universe).index))
+        if len(uni) < config.MIN_CROSS_SECTION:
+            return None
+        pr = pred_w.iloc[j].reindex(uni).fillna(0.0).to_numpy()
+        Xs = np.column_stack([style_arr[s].iloc[j].reindex(uni).fillna(0.0).to_numpy()
+                              for s in config.STYLE_FACTORS])
+        il = ind_map.reindex(uni).fillna("UNKNOWN").to_numpy()
+        wb = bw.reindex(uni).fillna(0.0).to_numpy(); wb = wb / wb.sum() if wb.sum() > 0 else wb
+        wp = w_prev_series.reindex(uni).fillna(0.0).to_numpy()
+        return optimize_weights(uni, pr, Xs, il, wb, wp, Tc, style_bound, ind_bound,
+                                config.STRAT_MAX_WEIGHT)
+
+    if execution == "open_open":
+        oo_ret = (open_w.shift(-1) / open_w - 1.0)              # open_j -> open_{j+1}
+        cb_oo = csi500_daily.copy(); cb_oo["trade_date"] = cb_oo["trade_date"].astype(str)
+        bopen = cb_oo.set_index("trade_date")["open"].reindex(dates).astype(float)
+        bench_oo = (bopen.shift(-1) / bopen - 1.0)
+        w_held = pd.Series(0.0, index=codes_all)
+        pending = {}
+        nav, bench_nav = 1.0, 1.0
+        daily, reb_rows = [], []
+        for j, d in enumerate(dates):
+            cost = 0.0
+            if j in pending:                                   # rebalance at open_j
+                w_tgt = pending.pop(j).reindex(codes_all).fillna(0.0)
+                turn = float(np.abs(w_tgt.to_numpy() - w_held.to_numpy()).sum()) / 2.0
+                cost = Tc * turn
+                reb_rows.append((d, turn, int((w_tgt > 1e-6).sum())))
+                w_held = w_tgt
+            r = np.nan_to_num(oo_ret.iloc[j].to_numpy(), nan=0.0)
+            port_ret = (1.0 - cost) * (1.0 + float(np.dot(w_held.to_numpy(), r))) - 1.0
+            grown = w_held.to_numpy() * (1.0 + r); s = grown.sum()
+            if s > 0:
+                w_held = pd.Series(grown / s, index=codes_all)
+            if j in reb_idx and j + 1 < len(dates):
+                wt = _decide(j, w_held)
+                if wt is not None:
+                    pending[j + 1] = wt
+            br = float(bench_oo.iloc[j]) if np.isfinite(bench_oo.iloc[j]) else 0.0
+            nav *= (1.0 + port_ret); bench_nav *= (1.0 + br)
+            daily.append((d, nav, bench_nav, port_ret, br))
+            if log_every and (j + 1) % log_every == 0:
+                print(f"  backtest[oo] {j+1}/{len(dates)}  nav={nav:.3f} bench={bench_nav:.3f}", flush=True)
+        dd = pd.DataFrame(daily, columns=["trade_date", "nav", "bench_nav", "port_ret", "bench_ret"])
+        dd["excess_ret"] = dd["port_ret"] - dd["bench_ret"]
+        return dd, pd.DataFrame(reb_rows, columns=["trade_date", "turnover", "n_holdings"])
+
     w_close = pd.Series(0.0, index=codes_all)                   # weights at prev close
     pending = {}                                                # exec-day index -> target w
     nav, bench_nav = 1.0, 1.0
