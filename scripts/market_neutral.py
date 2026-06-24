@@ -117,7 +117,8 @@ def main():
     bo = csi.set_index("trade_date")["open"].reindex(dates).astype(float)
     mkt = bo.shift(-1) / bo - 1.0
 
-    caps = [("无上限(基线)", None), ("≤60%", 0.60), ("≤40%", 0.40), ("≤20%", 0.20)]
+    caps = [("无上限(基线)", None), ("≤60%", 0.60), ("≤40%", 0.40), ("≤20%", 0.20),
+            ("≤10%", 0.10), ("≤5%", 0.05), ("≤3%", 0.03), ("≤2%", 0.02)]
     results, navs = [], {}
     for name, cap in caps:
         dd, ann_turn = run_ls(op, amt, pw, oo_daily, mkt, codes, dates, st_iv, cap)
@@ -150,18 +151,34 @@ def main():
         f.write("_单次单腿换手上限; 通过向新 decile 部分移动实现_\n\n")
         f.write(fmt.to_markdown() + "\n")
 
+    # fig31: NAV overlay (colormap, tight cap = warm)
     fig, ax = plt.subplots(figsize=(11, 4.6))
-    cols = {"无上限(基线)": GREY, "≤60%": BLUE, "≤40%": GREEN, "≤20%": RED}
     x = pd.to_datetime([str(v) for v in navs["无上限(基线)"]["trade_date"]], format="%Y%m%d")
-    for name, _ in caps:
-        s = stats(navs[name])
-        ax.plot(x, navs[name]["nav_ls"], color=cols[name], lw=1.8,
-                label=f"{name}: 年化{s['ann']*100:+.0f}% IR{s['ir']:+.2f} 换手{[r[5] for r in results if r[0]==name][0]:.0f}x")
+    cmap = plt.cm.plasma(np.linspace(0.05, 0.9, len(caps)))
+    for (name, _), col in zip(caps, cmap):
+        s = stats(navs[name]); tn = [r[5] for r in results if r[0] == name][0]
+        ax.plot(x, navs[name]["nav_ls"], color=col, lw=1.6,
+                label=f"{name}: 年化{s['ann']*100:+.0f}% IR{s['ir']:+.2f} 换手{tn:.0f}x")
     ax.set_yscale("log"); ax.axhline(1, color="grey", lw=0.5)
-    ax.set_title("图31 换手率上限对市场中性多空的影响 [h=7, 开盘→开盘, 全A可融券]")
-    ax.legend(loc="upper left", fontsize=9); ax.grid(alpha=0.25)
+    ax.set_title("图31 换手率上限对市场中性多空净值的影响 [h=7, 全A可融券]")
+    ax.legend(loc="upper left", fontsize=8, ncol=2); ax.grid(alpha=0.25)
     fig.tight_layout(); fig.savefig(os.path.join(config.FIGURE_DIR, "fig31_turnover_caps.png"), dpi=130, bbox_inches="tight"); plt.close(fig)
-    print(fmt.to_string())
+
+    # fig32: inflection — return & IR vs turnover cap
+    labels = list(tab.index); anns = (tab["年化收益"] * 100).to_numpy(); irs = tab["IR"].to_numpy()
+    best_i = int(np.nanargmax(irs))
+    fig, ax1 = plt.subplots(figsize=(9, 4.6))
+    bars = ax1.bar(range(len(labels)), anns, color=[GREEN if v >= 0 else RED for v in anns], alpha=0.8)
+    ax1.set_ylabel("年化收益 (%)"); ax1.axhline(0, color="grey", lw=0.6)
+    ax1.set_xticks(range(len(labels))); ax1.set_xticklabels(labels, fontsize=9, rotation=15)
+    ax2 = ax1.twinx(); ax2.plot(range(len(labels)), irs, color=BLUE, marker="o", lw=2, label="IR")
+    ax2.set_ylabel("IR", color=BLUE)
+    ax2.scatter([best_i], [irs[best_i]], s=140, facecolors="none", edgecolors=RED, lw=2, zorder=5)
+    ax2.annotate(f"拐点 {labels[best_i]}\nIR={irs[best_i]:.2f}", (best_i, irs[best_i]),
+                 textcoords="offset points", xytext=(6, -28), fontsize=10, color=RED)
+    ax1.set_title("图32 换手率拐点: 年化收益/IR vs 单次换手上限 [越紧→成本越省, 信号越稀]")
+    fig.tight_layout(); fig.savefig(os.path.join(config.FIGURE_DIR, "fig32_turnover_inflection.png"), dpi=130, bbox_inches="tight"); plt.close(fig)
+    print(fmt.to_string()); print(f"\n拐点(IR最大) = {labels[best_i]}  IR={irs[best_i]:.2f}  年化={anns[best_i]:.1f}%")
 
 
 if __name__ == "__main__":
