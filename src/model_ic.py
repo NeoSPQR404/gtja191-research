@@ -106,7 +106,7 @@ def compute_model_ic_multi_memmap(mmap_dir, style_long, industry_map, close_wide
                 E = Xm[:, idx] @ np.mean(buf, axis=0)
                 if np.std(E) > 0 and np.std(omega) > 0:
                     ic = np.corrcoef(E, omega)[0, 1]
-                    if np.isfinite(ic):
+                    if np.isfinite(ic) and dates[j] >= config.TEST_START:
                         ic_recs[name].append((dates[j], ic))
             buf.append(f_t)
             if len(buf) > T:
@@ -160,8 +160,8 @@ def export_predictions_memmap(mmap_dir, style_long, industry_map, close_wide,
         Z = np.hstack([Zind, st])
         Xt = np.nan_to_num(_winsor_standardize(_orthogonalize(_winsor_standardize(Y), Z)), nan=0.0)
         Xs = Xt[:, fidx]                                  # exposures, ALL valid stocks
-        # point-in-time forecast from PAST factor returns
-        if len(buf) >= min_T:
+        # point-in-time forecast from PAST factor returns (record only ≥ TEST_START)
+        if len(buf) >= min_T and dates[j] >= config.TEST_START:
             E = Xs @ np.mean(buf, axis=0)
             sel_codes = codes_arr[sel]
             for cc, e in zip(sel_codes, E):

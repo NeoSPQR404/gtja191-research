@@ -48,7 +48,7 @@ def load_inputs():
     panel = dl.load_panel(columns=["ts_code", "trade_date", "open", "close_hfq",
                                    "amount", "adj_factor"])
     uni = dl.select_universe(panel, basic)
-    panel = panel[panel["ts_code"].isin(uni)].reset_index(drop=True)
+    panel = panel[panel["ts_code"].isin(uni) & (panel["trade_date"] >= config.TEST_START)].reset_index(drop=True)
     pred = pd.read_parquet(cache("alpha_pred_full_a.parquet"))
     styles = pd.read_parquet(cache("barra_cne5s_factors_full_a.parquet"))
     industry_map = dl.load_industry().to_dict()
@@ -94,7 +94,7 @@ def main():
     print(f"main backtest done {time.time()-t0:.0f}s", flush=True)
 
     t11 = pd.DataFrame({
-        "本次复现 (2017-2025, vs中证500)": [
+        f"本次复现 ({config.WINDOW_LABEL}, vs中证500)": [
             f"{perf['ann_excess']*100:.2f}%", f"{perf['IR']:.2f}",
             f"{perf['max_drawdown']*100:.2f}%", f"{perf['two_way_turnover_x']:.1f}倍",
             f"{perf['mean_single_turnover']*100:.1f}%", f"{perf['mean_holdings']:.0f}"],

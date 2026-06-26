@@ -5,6 +5,10 @@ Reproduction of 国泰君安《数量化专题之九十三：基于短周期价�
 
 > **📄 一页总结见 [SUMMARY.md](SUMMARY.md)** — 全流程 §3.3–§3.6 + 可交易性深挖链
 > （隔夜诊断 → 多空 → 最优持有 7 日 → 市场中性 → 换手拐点）、关键数据、图表索引、工程说明。
+>
+> **🔬 样本内对照见 [INSAMPLE_VS_OOS.md](INSAMPLE_VS_OOS.md)（A1）** — 把同一管线放回研报
+> 2012-2017 窗口：策略转正 **+9.5%/IR 0.64**（样本外 −24.5%），胜率 88.0%≈研报 88.7% →
+> **证实样本外失效是真实 alpha 衰减（~2016 起），非实现 bug**；可交易日内 IC 翻号 +0.016→−0.012。
 
 * **Reference**: `../gtja191-reference/` — the report PDF + MSCI *Barra CNE5S Model
   Descriptor* (descriptor weights).

@@ -125,6 +125,8 @@ def run_test_memmap(mmap_dir, style_long, industry_map, close_wide, horizons=Non
 
     fr_records = {d: [] for d in horizons}
     for j in range(T):
+        if dates[j] < config.TEST_START:                  # warmup-only dates (in-sample)
+            continue
         sel = valid[j * N:(j + 1) * N]
         if sel.sum() < config.MIN_CROSS_SECTION:
             continue

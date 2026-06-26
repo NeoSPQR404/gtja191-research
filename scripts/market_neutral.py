@@ -136,7 +136,7 @@ def main():
     config.UNIVERSE_MODE = "full_a"
     panel = dl.load_panel(columns=["ts_code", "trade_date", "open", "amount", "adj_factor"])
     basic = dl.load_stock_basic(); uni = dl.select_universe(panel, basic)
-    panel = panel[panel.ts_code.isin(uni)]
+    panel = panel[panel.ts_code.isin(uni) & (panel.trade_date >= config.TEST_START)]
     st_iv = stg.st_codes_by_date(pd.read_parquet(config.NAMECHANGE))
     p = panel.sort_values(["ts_code", "trade_date"]).copy()
     p["open_hfq"] = p["open"] * p["adj_factor"]

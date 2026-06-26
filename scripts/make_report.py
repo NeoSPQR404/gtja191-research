@@ -64,7 +64,7 @@ def tables(fr, ir):
     h = config.HORIZONS
     t7 = pd.DataFrame({
         f"DAY{d}": [f"{fr[d].mean()*100:.2f}%", f"{REPORT_FR[d]:.2f}%"] for d in h
-    }, index=["本次复现 (2017-2025, 全A非ST, 样本外)", "研报 (2012-2017, 全A非ST)"])
+    }, index=[f"本次复现 ({config.WINDOW_LABEL}, 全A非ST)", "研报 (2012-2017, 全A非ST)"])
     t8 = pd.DataFrame({
         f"DAY{d}": [f"{ir[d].mean():.2f}", f"{ir[d].abs().mean():.2f}", f"{REPORT_IR[d]:.2f}"]
         for d in h
@@ -73,7 +73,7 @@ def tables(fr, ir):
     t8.to_csv(os.path.join(config.TABLE_DIR, "table8_mean_IR.csv"))
     with open(os.path.join(config.TABLE_DIR, "tables_7_8.md"), "w") as f:
         f.write(f"_有效（非退化）因子数: {int(ir[1].notna().sum())}；预测周期 d=1..5；"
-                f"窗口 2017-2025（样本外）_\n\n")
+                f"窗口 {config.WINDOW_LABEL}_\n\n")
         f.write("### 表7 不同预测周期下所有因子收益率均值\n\n" + t7.to_markdown() + "\n\n")
         f.write("### 表8 不同预测周期下所有因子收益率IR均值\n\n" + t8.to_markdown() + "\n")
     return t7, t8

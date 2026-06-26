@@ -36,9 +36,10 @@ import pandas as pd
 
 import config
 
-WEIGHTS = config.CNE5S_WEIGHTS
+WEIGHTS = {k: config.CNE5S_WEIGHTS[k] for k in config.STYLE_FACTORS}
 STYLES = list(WEIGHTS)
 ALL_DESCRIPTORS = sorted({d for w in WEIGHTS.values() for d in w})
+_NEED = set(ALL_DESCRIPTORS)                              # descriptors actually requested
 
 
 # ---------------------------------------------------------------- descriptors
@@ -95,28 +96,29 @@ def _descriptors_batch(panel, bench):
     df["RSTR"] = df.groupby("ts_code")["logret"].transform(
         lambda s: s.ewm(halflife=config.RSTR_HALFLIFE, min_periods=config.BETA_WINDOW).mean().shift(config.RSTR_LAG))
 
-    # --- level descriptors ---
+    # --- level descriptors (LNCAP price-based; the rest need financials → guard) ---
     mv = df["total_mv"].where(df["total_mv"] > 0)
     df["LNCAP"] = np.log(mv)
-    df["ETOP"] = df["n_income_attr_p_ttm"] / df["total_mv"]
-    df["CETOP"] = df["n_cashflow_act_ttm"] / df["total_mv"]
-    df["BTOP"] = df["total_hldr_eqy_exc_min_int"] / df["total_mv"]
-    LD = df[["lt_borr", "bond_payable", "non_cur_liab_due_1y"]].sum(axis=1, min_count=1).fillna(0)
-    ME = df["total_mv"]
-    BE = df["total_hldr_eqy_exc_min_int"]
-    df["MLEV"] = (ME + LD) / ME.where(ME > 0)                 # PE (preferred) ≈ 0
-    df["DTOA"] = df["total_liab"] / df["total_assets"].where(df["total_assets"] > 0)
-    df["BLEV"] = (BE + LD) / BE.where(BE != 0)
+    if _NEED & {"ETOP", "CETOP", "BTOP", "MLEV", "DTOA", "BLEV"}:
+        df["ETOP"] = df["n_income_attr_p_ttm"] / df["total_mv"]
+        df["CETOP"] = df["n_cashflow_act_ttm"] / df["total_mv"]
+        df["BTOP"] = df["total_hldr_eqy_exc_min_int"] / df["total_mv"]
+        LD = df[["lt_borr", "bond_payable", "non_cur_liab_due_1y"]].sum(axis=1, min_count=1).fillna(0)
+        ME = df["total_mv"]
+        BE = df["total_hldr_eqy_exc_min_int"]
+        df["MLEV"] = (ME + LD) / ME.where(ME > 0)             # PE (preferred) ≈ 0
+        df["DTOA"] = df["total_liab"] / df["total_assets"].where(df["total_assets"] > 0)
+        df["BLEV"] = (BE + LD) / BE.where(BE != 0)
 
     # --- consensus PROXIES (forecast 业绩预告 / express 业绩快报) ---
-    fc_np_mid = df[["fc_net_profit_min", "fc_net_profit_max"]].mean(axis=1)        # 万元
-    exp_np_wan = df["exp_n_income"] / 1e4                                          # 元 -> 万元
-    fwd_np = fc_np_mid.where(fc_np_mid.notna(), exp_np_wan)
-    df["EPIBS"] = fwd_np / mv                                                      # forward E/P proxy
-    fc_g = df[["fc_p_change_min", "fc_p_change_max"]].mean(axis=1) / 100.0         # YoY %
-    fwd_g = fc_g.where(fc_g.notna(), df["exp_yoy_net_profit"] / 100.0)
-    df["EGIBS"] = fwd_g                                                            # long-term proxy
-    df["EGIBS_s"] = fwd_g                                                          # short-term proxy (same series)
+    if _NEED & {"EPIBS", "EGIBS", "EGIBS_s"}:
+        fc_np_mid = df[["fc_net_profit_min", "fc_net_profit_max"]].mean(axis=1)    # 万元
+        fwd_np = fc_np_mid.where(fc_np_mid.notna(), df["exp_n_income"] / 1e4)
+        df["EPIBS"] = fwd_np / mv                                                  # forward E/P proxy
+        fc_g = df[["fc_p_change_min", "fc_p_change_max"]].mean(axis=1) / 100.0
+        fwd_g = fc_g.where(fc_g.notna(), df["exp_yoy_net_profit"] / 100.0)
+        df["EGIBS"] = fwd_g
+        df["EGIBS_s"] = fwd_g
 
     # --- Liquidity STOM/STOQ/STOA from daily turnover (换手率, %) ---
     def _rsum(w, minp):
@@ -141,9 +143,11 @@ def _descriptors_batch(panel, bench):
     lag["ym"] = monthly.groupby("ts_code")["ym"].shift(-1)
     df = df.merge(lag.dropna(subset=["ym"]), on=["ts_code", "ym"], how="left")
 
-    # --- SGRO / EGRO: 5y annual-statement growth (as-of by ann_date) ---
-    growth = _annual_growth(df["ts_code"].unique())
-    df = _asof_merge_growth(df, growth)
+    # --- SGRO / EGRO: 5y annual-statement growth (as-of by ann_date) — reads income
+    # files per stock, so only when Growth descriptors are actually requested ---
+    if _NEED & {"SGRO", "EGRO"}:
+        growth = _annual_growth(df["ts_code"].unique())
+        df = _asof_merge_growth(df, growth)
 
     # slim to keys + total_mv (cap weights) + descriptors; drop the raw price /
     # financial / forecast inputs so the standardisation stage stays memory-lean.

@@ -27,16 +27,33 @@ LOCAL_RAW = os.path.join(ROOT, "data", "raw")
 SW_MEMBER = os.path.join(LOCAL_RAW, "sw_member_all.parquet")        # ts_code -> l1
 SW_CLASSIFY = os.path.join(LOCAL_RAW, "sw2021_l1_classify.parquet") # 31 L1 industries
 
+# Run window/tag: GTJA_RUN_TAG="" → out-of-sample 2017-2025 (default, committed);
+# GTJA_RUN_TAG="insample" → the report's window 2012.01-2017.04 (A1 validation).
+# SUF suffixes cache filenames; figures/tables go to window-specific dirs so the
+# in-sample run never clobbers the committed OOS results.
+RUN_TAG = os.environ.get("GTJA_RUN_TAG", "").strip()
+SUF = ("_" + RUN_TAG) if RUN_TAG else ""
+
 REPORT_DIR = os.path.join(ROOT, "report")
-TABLE_DIR = os.path.join(REPORT_DIR, "tables")
-FIGURE_DIR = os.path.join(REPORT_DIR, "figures")
-CACHE_DIR = os.path.join(REPORT_DIR, "cache")
+TABLE_DIR = os.path.join(REPORT_DIR, "tables" + SUF)
+FIGURE_DIR = os.path.join(REPORT_DIR, "figures" + SUF)
+CACHE_DIR = os.path.join(REPORT_DIR, "cache" + SUF)      # window-specific; OOS untouched
 for _d in (TABLE_DIR, FIGURE_DIR, CACHE_DIR, LOCAL_RAW):
     os.makedirs(_d, exist_ok=True)
 
 # ---------------------------------------------------------------- sample
-START_DATE = "20170101"
-END_DATE = "20251231"
+# START_DATE/END_DATE = panel-load span (includes ~2y warmup for the 250-500d alphas);
+# TEST_START = first date the single-factor test / model-IC / strategy actually report
+# on (so the in-sample run matches the report's 2012.01-2017.04 window exactly while
+# the alphas computed from 2012-01 still have full warmup from 2010-2011 data).
+if RUN_TAG == "insample":
+    START_DATE, END_DATE = "20100101", "20170430"        # load 2010 for warmup
+    TEST_START = "20120101"                              # report's backtest start
+    WINDOW_LABEL = "2012-2017（样本内）"
+else:
+    START_DATE, END_DATE = "20170101", "20251231"
+    TEST_START = "20170101"
+    WINDOW_LABEL = "2017-2025（样本外）"
 
 # Universe. "full_a": every A-share with >= MIN_HISTORY_DAYS history, ex-ST
 # (the report's choice). "topN": top UNIVERSE_SIZE by median daily amount
@@ -103,6 +120,13 @@ CONSENSUS_DESCRIPTORS = ("EPIBS", "EGIBS", "EGIBS_s")
 # The 9 CNE5S styles used as neutralisation controls (report §2 omits Non-linear
 # Size from its style list, so we follow the report and use these 9).
 STYLE_FACTORS = list(CNE5S_WEIGHTS.keys())
+
+# In-sample (A1) uses a fast PRICE-ONLY panel (the report's financials pre-2017 are a
+# huge throttled fetch); neutralise against the 5 price-based styles + industry. The
+# 189 price-only alphas — the actual return source — are fully available.
+if RUN_TAG == "insample":
+    PANEL_DIR = os.path.join(DATA_ROOT, "panel_insample")
+    STYLE_FACTORS = ["Beta", "Momentum", "Size", "Volatility", "Liquidity"]
 
 # BARRA descriptor estimation parameters (report appendix 1 values; the report
 # uses 沪深300 + half-life 60/120/40, which differ slightly from MSCI's
