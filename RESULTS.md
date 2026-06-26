@@ -282,6 +282,22 @@ edge≈0（日内 IC −0.012），故任意 Tc>0 都是亏损、且 Tc 越高�
 
 ---
 
+## 研究延伸：隔夜 alpha 的理论上限（"冰山"，图36）
+用同一个 Ê 信号，比较三个执行窗口的十分位多空**毛**收益（全A，2017-2025）：
+
+| 执行窗口 | 多空年化(毛) | IR | 可交易 |
+|---|---|---|---|
+| **隔夜 close→open（信号主场）** | **+209%** | **36.5** | ❌ 收盘即时成交=看穿 |
+| 收盘→收盘（§3.4 预测目标） | +186% | 20.1 | ❌ |
+| 开盘→开盘（现实可交易，毛） | +56% | 6.4 | ✅ 但下游被成本吃光 |
+
+- **递减阶梯**：隔夜理论上限 **+209%/年（IR 36）** → 开盘→开盘可交易毛 **+56%** → 风格中性+换手成本后毛
+  **+1.2%** → 计入官方融券 8.35% 后 **−7%**。图36 对数轴：隔夜/收盘线复利到 ~10⁸、可交易线只到 ~10²，
+  **相差 6 个数量级**。
+- 这是研报"我们只看到了**冰山一角**"的定量版：**水下（隔夜跳空）巨大但摸不到**（信号需收盘数据算、却要
+  收盘成交），**水上（可交易净）为负**。整套价量 alpha 的预测力是真实存在的（IR 36），只是几乎全部落在
+  不可交易的时段+空头，再被做空成本封死。
+
 ## 复算
 ```bash
 # 阶段1（一次性，~4.4h，已缓存于 report/cache/signals_full_a_cross_section/）
@@ -296,4 +312,7 @@ python scripts/run_model_ic.py --universe full_a
 python scripts/export_predictions.py --universe full_a   # 一次性，缓存 alpha_pred
 python scripts/run_strategy.py                           # [--sweep 跑 Tc 敏感性]
 python scripts/tradability_diag.py                       # 多空 vs 长仓 可交易性 (图28)
+python scripts/holding_period.py                         # IC衰减→最优持有期 (图29)
+python scripts/market_neutral.py                         # 市场中性+换手+中性化+融券 (图30-35)
+python scripts/overnight_ceiling.py                      # 研究延伸: 隔夜理论上限 (图36)
 ```
