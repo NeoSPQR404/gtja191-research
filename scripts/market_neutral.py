@@ -282,6 +282,41 @@ def main():
     fig.suptitle("图34 多空腿风格/行业中性化效果 [h=7, 全A可融券]", fontsize=13)
     fig.tight_layout(); fig.savefig(os.path.join(config.FIGURE_DIR, "fig34_neutralized.png"), dpi=130, bbox_inches="tight"); plt.close(fig)
 
+    # ===== C1: 融券借券成本敏感性（最优中性档 nbest） =====
+    bser = nnavs[nbest]["ls_ret"]                         # gross of borrow, net of trading
+    gross_ann = bser.mean() * Y
+    nnavs[nbest][["trade_date", "nav_ls", "ls_ret", "mkt_ret"]].to_parquet(
+        os.path.join(config.CACHE_DIR, "market_neutral_neutral_best.parquet"), index=False)
+    rates = [0.0, 0.02, 0.04, 0.0835, 0.10, 0.15]        # 8.35% = 官方融券费率
+    brows = []
+    for rt in rates:
+        rn = bser - rt / Y                                # daily borrow carry on the $1 short
+        ann = rn.mean() * Y; vol = rn.std() * np.sqrt(Y); ir = ann / vol if vol > 0 else float("nan")
+        nav = (1 + rn).cumprod(); mdd = (nav / nav.cummax() - 1).min()
+        brows.append((rt, ann, ir, mdd))
+    bdf = pd.DataFrame([(f"{r*100:.2f}%", f"{a*100:+.1f}%", f"{i:.2f}", f"{m*100:.1f}%") for r, a, i, m in brows],
+                       columns=["融券费率(年化)", "年化净收益", "IR", "最大回撤"]).set_index("融券费率(年化)")
+    bdf.to_csv(os.path.join(config.TABLE_DIR, "market_neutral_borrow.csv"))
+    with open(os.path.join(config.TABLE_DIR, "market_neutral_borrow.md"), "w") as f:
+        f.write(f"### C1 融券成本敏感性（最优中性档 {nbest}, h=7, 2017-2025）\n\n")
+        f.write(bdf.to_markdown() + f"\n\n_毛收益(未计融券)≈{gross_ann*100:+.1f}%/年 → "
+                f"盈亏平衡融券费率≈{gross_ann*100:.1f}%；而官方融券费率≈8.35%（难借小票更高）"
+                f"→ 计入融券后净收益≈{(gross_ann-0.0835)*100:.1f}%/年，策略转负_\n")
+
+    fig, ax1 = plt.subplots(figsize=(9, 4.6))
+    rr = [r * 100 for r, _, _, _ in brows]
+    ax1.plot(rr, [a * 100 for _, a, _, _ in brows], color=GREEN, marker="o", lw=2, label="年化净收益")
+    ax1.axhline(0, color="grey", lw=0.6); ax1.set_xlabel("融券费率 (年化 %)"); ax1.set_ylabel("年化净收益 (%)", color=GREEN)
+    ax1.axvline(gross_ann * 100, color=BLUE, ls=":", lw=1.2)
+    ax1.annotate(f"盈亏平衡≈{gross_ann*100:.1f}%", (gross_ann * 100, 0), textcoords="offset points",
+                 xytext=(6, 14), fontsize=10, color=BLUE)
+    ax1.axvline(8.35, color=RED, ls="--", lw=1.2)
+    ax1.annotate("官方融券费率 8.35%", (8.35, 0), textcoords="offset points", xytext=(6, -28), fontsize=10, color=RED)
+    ax2 = ax1.twinx(); ax2.plot(rr, [i for _, _, i, _ in brows], color=GREY, marker="s", lw=1.5, label="IR")
+    ax2.set_ylabel("IR", color=GREY)
+    ax1.set_title(f"图35 融券成本敏感性（最优中性档{nbest}）: 盈亏平衡费率仅≈{gross_ann*100:.1f}% << 8.35%")
+    fig.tight_layout(); fig.savefig(os.path.join(config.FIGURE_DIR, "fig35_borrow_cost.png"), dpi=130, bbox_inches="tight"); plt.close(fig)
+
     print(fmt.to_string()); print(f"\n拐点(IR最大) = {labels[best_i]}  IR={irs[best_i]:.2f}  年化={anns[best_i]:.1f}%")
     print(f"收益最高档 = {best_name}: 年化{s['ann']*100:+.1f}% IR{s['ir']:.2f} 回撤{s['mdd']*100:.0f}% | "
           f"中证500 年化{m_ann*100:+.1f}% 回撤{m_mdd*100:.0f}% | 相关性{corr:+.2f}")
