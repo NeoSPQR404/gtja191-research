@@ -46,12 +46,18 @@ def _cap_move(w_old, w_tgt, cap):
     return w_old + (cap / t) * (w_tgt - w_old)
 
 
-def run_ls(op, amt, pw, oo_daily, mkt, codes, dates, st_iv, turnover_cap=None):
+def _zstd(M):
+    mu = np.nanmean(M, axis=0); sd = np.nanstd(M, axis=0)
+    return np.nan_to_num((M - mu) / np.where(sd < 1e-12, np.nan, sd), nan=0.0)
+
+
+def run_ls(op, amt, pw, oo_daily, mkt, codes, dates, st_iv, turnover_cap=None,
+           style_arr=None, ind_dum=None, code_pos=None, neutralize=False):
     code_index = pd.Index(codes); T = len(dates)
     first = pw.notna().any(axis=1).to_numpy().argmax()
     exec_days = set(range(first + 1, T - 1, HOLD))
     lw = pd.Series(0.0, index=codes); sw = pd.Series(0.0, index=codes)
-    pend, rec, turns = {}, [], []
+    pend, rec, turns, expo = {}, [], [], []           # expo = |net style exposure| per reb
     nav_ls = nav_long = nav_short = nav_mkt = 1.0
     for j in range(T):
         cost = 0.0
@@ -80,15 +86,30 @@ def run_ls(op, amt, pw, oo_daily, mkt, codes, dates, st_iv, turnover_cap=None):
                   & (amt.iloc[j].fillna(0) > 0)).to_numpy()
             ok &= ~code_index.isin(st_set)
             liq = amt.iloc[j].reindex(code_index[ok]).fillna(0).sort_values(ascending=False)
-            x = pw.iloc[j].reindex(liq.head(MAXUNI).index).dropna().sort_values()
+            sig = pw.iloc[j].reindex(liq.head(MAXUNI).index).dropna()
+            u = sig.index
+            pos = np.array([code_pos[c] for c in u]) if code_pos is not None else None
+            Zs = None
+            if pos is not None:                       # this date's style matrix for u
+                Zs = _zstd(np.column_stack([style_arr[s][j][pos] for s in config.STYLE_FACTORS]))
+            if neutralize and pos is not None and len(u) > 40:
+                Zi = ind_dum[pos]; Zi = Zi[:, Zi.sum(0) > 0]
+                Z = np.hstack([Zi, Zs, np.ones((len(u), 1))])
+                e = sig.to_numpy()
+                coef, *_ = np.linalg.lstsq(Z, e, rcond=None)
+                sig = pd.Series(e - Z @ coef, index=u)   # style/industry-neutral signal
+            x = sig.sort_values()
             k = max(int(len(x) * DECILE), 1)
             nlw = pd.Series(0.0, index=codes); nlw[x.index[-k:]] = 1.0 / k
             nsw = pd.Series(0.0, index=codes); nsw[x.index[:k]] = 1.0 / k
             pend[j + 1] = (nlw, nsw)
+            if Zs is not None:                        # realized net style exposure of the spread
+                net = (nlw.reindex(u).to_numpy() - nsw.reindex(u).to_numpy())
+                expo.append(float(np.mean(np.abs(net @ Zs))))
     dd = pd.DataFrame(rec, columns=["trade_date", "nav_ls", "nav_long", "nav_short",
                                     "nav_mkt", "ls_ret", "long_ret", "short_ret", "mkt_ret"])
     ann_turn = (np.mean(turns) * (Y / HOLD) * 2) if turns else 0.0
-    return dd, ann_turn
+    return dd, ann_turn, (float(np.mean(expo)) if expo else float("nan"))
 
 
 def stats(dd):
@@ -97,6 +118,18 @@ def stats(dd):
     return {"ann": r.mean() * Y, "vol": r.std() * np.sqrt(Y),
             "ir": r.mean() / r.std() * np.sqrt(Y) if r.std() > 0 else np.nan,
             "mdd": (nav / nav.cummax() - 1).min(), "win": (r > 0).mean()}
+
+
+def sweep(op, amt, pw, oo_daily, mkt, codes, dates, st_iv, caps, style_arr, ind_dum, code_pos, neut):
+    results, navs, expos = [], {}, {}
+    for name, cap in caps:
+        dd, ann_turn, ex = run_ls(op, amt, pw, oo_daily, mkt, codes, dates, st_iv, cap,
+                                  style_arr=style_arr, ind_dum=ind_dum, code_pos=code_pos, neutralize=neut)
+        s = stats(dd); navs[name] = dd; expos[name] = ex
+        long_ex = (dd["long_ret"] - dd["mkt_ret"]).mean() * Y
+        short_ex = (dd["mkt_ret"] - dd["short_ret"]).mean() * Y
+        results.append((name, s["ann"], s["vol"], s["ir"], s["mdd"], ann_turn, long_ex, short_ex))
+    return results, navs, expos
 
 
 def main():
@@ -116,28 +149,34 @@ def main():
     csi = pd.read_parquet(config.CSI500_RAW); csi["trade_date"] = csi.trade_date.astype(str)
     bo = csi.set_index("trade_date")["open"].reindex(dates).astype(float)
     mkt = bo.shift(-1) / bo - 1.0
+    # styles + industry for the neutralisation
+    sl = pd.read_parquet(os.path.join(config.CACHE_DIR, "barra_cne5s_factors_full_a.parquet"))
+    sl["trade_date"] = sl["trade_date"].astype(str); sl = sl.set_index(["trade_date", "ts_code"])
+    style_arr = {s: sl[s].unstack("ts_code").reindex(index=dates, columns=codes).to_numpy()
+                 for s in config.STYLE_FACTORS}
+    ind = pd.Series(dl.load_industry()).reindex(codes).fillna("UNKNOWN")
+    ind_dum = pd.get_dummies(ind).astype(float).to_numpy()
+    code_pos = {c: i for i, c in enumerate(codes)}
 
     caps = [("无上限(基线)", None), ("≤60%", 0.60), ("≤40%", 0.40), ("≤20%", 0.20),
             ("≤10%", 0.10), ("≤5%", 0.05), ("≤3%", 0.03), ("≤2%", 0.02)]
-    results, navs = [], {}
-    for name, cap in caps:
-        dd, ann_turn = run_ls(op, amt, pw, oo_daily, mkt, codes, dates, st_iv, cap)
-        s = stats(dd); navs[name] = dd
-        long_ex = (dd["long_ret"] - dd["mkt_ret"]).mean() * Y
-        short_ex = (dd["mkt_ret"] - dd["short_ret"]).mean() * Y
-        results.append((name, s["ann"], s["vol"], s["ir"], s["mdd"], ann_turn, long_ex, short_ex))
-        if cap is None:                                        # baseline leg decomposition (fig30)
-            dd.to_parquet(os.path.join(config.CACHE_DIR, "market_neutral_daily.parquet"), index=False)
-            fig, ax = plt.subplots(figsize=(11, 4.6))
-            x = pd.to_datetime([str(v) for v in dd["trade_date"]], format="%Y%m%d")
-            ax.plot(x, dd["nav_ls"], color=GREEN, lw=2, label=f"市场中性多空  IR={s['ir']:.2f}")
-            ax.plot(x, dd["nav_long"], color=BLUE, lw=1, alpha=0.8, label="多头腿")
-            ax.plot(x, dd["nav_short"], color=RED, lw=1, alpha=0.8, label="空头腿(越低=越该做空)")
-            ax.plot(x, dd["nav_mkt"], color=GREY, lw=1, ls="--", label="中证500")
-            ax.set_yscale("log"); ax.axhline(1, color="grey", lw=0.5)
-            ax.set_title(f"图30 市场中性多空净值 [h=7, 无换手上限]  年化{s['ann']*100:.0f}% 回撤{s['mdd']*100:.0f}%")
-            ax.legend(loc="lower left", fontsize=9); ax.grid(alpha=0.25)
-            fig.tight_layout(); fig.savefig(os.path.join(config.FIGURE_DIR, "fig30_market_neutral.png"), dpi=130, bbox_inches="tight"); plt.close(fig)
+    args = (op, amt, pw, oo_daily, mkt, codes, dates, st_iv, caps, style_arr, ind_dum, code_pos)
+    results, navs, expos = sweep(*args, neut=False)                # raw decile L/S
+    nresults, nnavs, nexpos = sweep(*args, neut=True)              # style/industry-neutral L/S
+
+    # baseline leg decomposition (fig30, raw)
+    dd = navs["无上限(基线)"]; s = stats(dd)
+    dd.to_parquet(os.path.join(config.CACHE_DIR, "market_neutral_daily.parquet"), index=False)
+    fig, ax = plt.subplots(figsize=(11, 4.6))
+    x = pd.to_datetime([str(v) for v in dd["trade_date"]], format="%Y%m%d")
+    ax.plot(x, dd["nav_ls"], color=GREEN, lw=2, label=f"市场中性多空  IR={s['ir']:.2f}")
+    ax.plot(x, dd["nav_long"], color=BLUE, lw=1, alpha=0.8, label="多头腿")
+    ax.plot(x, dd["nav_short"], color=RED, lw=1, alpha=0.8, label="空头腿(越低=越该做空)")
+    ax.plot(x, dd["nav_mkt"], color=GREY, lw=1, ls="--", label="中证500")
+    ax.set_yscale("log"); ax.axhline(1, color="grey", lw=0.5)
+    ax.set_title(f"图30 市场中性多空净值 [h=7, 无换手上限]  年化{s['ann']*100:.0f}% 回撤{s['mdd']*100:.0f}%")
+    ax.legend(loc="lower left", fontsize=9); ax.grid(alpha=0.25)
+    fig.tight_layout(); fig.savefig(os.path.join(config.FIGURE_DIR, "fig30_market_neutral.png"), dpi=130, bbox_inches="tight"); plt.close(fig)
 
     tab = pd.DataFrame(results, columns=["换手上限", "年化收益", "年化波动", "IR", "最大回撤",
                                          "年化双边换手", "多头超额", "空头贡献"]).set_index("换手上限")
@@ -211,9 +250,43 @@ def main():
     ax.legend(loc="upper left", fontsize=9); ax.grid(alpha=0.25)
     fig.tight_layout(); fig.savefig(os.path.join(config.FIGURE_DIR, "fig33_best_vs_benchmark.png"), dpi=130, bbox_inches="tight"); plt.close(fig)
 
+    # ===== B3: 裸 decile vs 风格/行业中性化 多空 =====
+    ntab = pd.DataFrame(nresults, columns=["换手上限", "年化收益", "年化波动", "IR", "最大回撤",
+                                           "年化双边换手", "多头超额", "空头贡献"]).set_index("换手上限")
+    L = list(tab.index)
+    cmp_rows = [[n, f"{tab.loc[n,'年化收益']*100:+.1f}%", f"{tab.loc[n,'IR']:.2f}", f"{expos[n]:.3f}",
+                 f"{ntab.loc[n,'年化收益']*100:+.1f}%", f"{ntab.loc[n,'IR']:.2f}", f"{nexpos[n]:.3f}"] for n in L]
+    cdf = pd.DataFrame(cmp_rows, columns=["换手上限", "裸 年化", "裸 IR", "裸 净风格敞口",
+                                          "中性 年化", "中性 IR", "中性 净风格敞口"]).set_index("换手上限")
+    cdf.to_csv(os.path.join(config.TABLE_DIR, "market_neutral_neutralized.csv"))
+    nbest = max(nresults, key=lambda r: r[3])[0]          # neutral, by IR
+    nb = nnavs[nbest]; ns = stats(nb); ncorr = nb["ls_ret"].corr(nb["mkt_ret"])
+    with open(os.path.join(config.TABLE_DIR, "market_neutral_neutralized.md"), "w") as f:
+        f.write("### B3 多空腿风格/行业中性化 vs 裸 decile (h=7, 开盘→开盘, 2017-2025)\n\n")
+        f.write(cdf.to_markdown() + "\n\n")
+        f.write(f"_中性化把净风格敞口压到≈0（裸 ~{expos['≤10%']:.2f} → 中性 ~{nexpos['≤10%']:.3f}）；"
+                f"最优中性档 {nbest}：年化{ns['ann']*100:+.1f}% IR{ns['ir']:.2f} 回撤{ns['mdd']*100:.0f}% "
+                f"与中证500相关性{ncorr:+.2f}_\n")
+
+    fig, (a1, a2) = plt.subplots(1, 2, figsize=(12, 4.4))
+    a1.plot(range(len(L)), tab["IR"].values, color=GREY, marker="o", lw=1.8, label="裸 decile 多空")
+    a1.plot(range(len(L)), ntab["IR"].values, color=GREEN, marker="s", lw=2, label="风格/行业中性化")
+    a1.set_xticks(range(len(L))); a1.set_xticklabels(L, rotation=20, fontsize=8)
+    a1.set_ylabel("IR"); a1.axhline(0, color="grey", lw=0.5); a1.legend(fontsize=9); a1.grid(alpha=0.25)
+    a1.set_title("IR vs 换手上限")
+    a2.plot(range(len(L)), [expos[n] for n in L], color=GREY, marker="o", lw=1.8, label="裸 净风格敞口")
+    a2.plot(range(len(L)), [nexpos[n] for n in L], color=GREEN, marker="s", lw=2, label="中性化 净风格敞口")
+    a2.set_xticks(range(len(L))); a2.set_xticklabels(L, rotation=20, fontsize=8)
+    a2.set_ylabel("|净风格敞口|"); a2.legend(fontsize=9); a2.grid(alpha=0.25)
+    a2.set_title("净风格敞口(越低越中性)")
+    fig.suptitle("图34 多空腿风格/行业中性化效果 [h=7, 全A可融券]", fontsize=13)
+    fig.tight_layout(); fig.savefig(os.path.join(config.FIGURE_DIR, "fig34_neutralized.png"), dpi=130, bbox_inches="tight"); plt.close(fig)
+
     print(fmt.to_string()); print(f"\n拐点(IR最大) = {labels[best_i]}  IR={irs[best_i]:.2f}  年化={anns[best_i]:.1f}%")
     print(f"收益最高档 = {best_name}: 年化{s['ann']*100:+.1f}% IR{s['ir']:.2f} 回撤{s['mdd']*100:.0f}% | "
           f"中证500 年化{m_ann*100:+.1f}% 回撤{m_mdd*100:.0f}% | 相关性{corr:+.2f}")
+    print("\n=== 裸 vs 中性化 ===\n", cdf.to_string())
+    print(f"最优中性档 {nbest}: 年化{ns['ann']*100:+.1f}% IR{ns['ir']:.2f} 回撤{ns['mdd']*100:.0f}% 相关{ncorr:+.2f}")
 
 
 if __name__ == "__main__":
