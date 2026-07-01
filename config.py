@@ -46,7 +46,7 @@ for _d in (TABLE_DIR, FIGURE_DIR, CACHE_DIR, LOCAL_RAW):
 # TEST_START = first date the single-factor test / model-IC / strategy actually report
 # on (so the in-sample run matches the report's 2012.01-2017.04 window exactly while
 # the alphas computed from 2012-01 still have full warmup from 2010-2011 data).
-if RUN_TAG == "insample":
+if RUN_TAG in ("insample", "insample_full"):
     START_DATE, END_DATE = "20100101", "20170430"        # load 2010 for warmup
     TEST_START = "20120101"                              # report's backtest start
     WINDOW_LABEL = "2012-2017（样本内）"
@@ -121,12 +121,15 @@ CONSENSUS_DESCRIPTORS = ("EPIBS", "EGIBS", "EGIBS_s")
 # Size from its style list, so we follow the report and use these 9).
 STYLE_FACTORS = list(CNE5S_WEIGHTS.keys())
 
-# In-sample (A1) uses a fast PRICE-ONLY panel (the report's financials pre-2017 are a
-# huge throttled fetch); neutralise against the 5 price-based styles + industry. The
-# 189 price-only alphas — the actual return source — are fully available.
+# In-sample (A1) variants: "insample" uses a fast PRICE-ONLY panel with the 5
+# price-based styles (the full pre-2017 financial fetch is throttle-heavy);
+# "insample_full" uses the full 9-style panel_insample_full (financials backfilled to
+# 2005, forecast/express skipped → consensus proxies renormalize, same as OOS).
 if RUN_TAG == "insample":
     PANEL_DIR = os.path.join(DATA_ROOT, "panel_insample")
     STYLE_FACTORS = ["Beta", "Momentum", "Size", "Volatility", "Liquidity"]
+elif RUN_TAG == "insample_full":
+    PANEL_DIR = os.path.join(DATA_ROOT, "panel_insample_full")   # full 9-style
 
 # BARRA descriptor estimation parameters (report appendix 1 values; the report
 # uses 沪深300 + half-life 60/120/40, which differ slightly from MSCI's

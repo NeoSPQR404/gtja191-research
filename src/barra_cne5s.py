@@ -160,19 +160,32 @@ def _descriptors_batch(panel, bench):
 
 def _annual_growth(codes):
     """Per stock: 5y trailing growth = OLS slope / |mean| of annual total_revenue
-    (SGRO) and n_income_attr_p (EGRO), keyed by ann_date for point-in-time use."""
+    (SGRO) and n_income_attr_p (EGRO), keyed by ann_date for point-in-time use.
+    Reads the consolidated income parquet if present (avoids per-stock file reads,
+    which the macOS background-I/O throttle punishes); else per-stock files."""
     rows = []
+    cons = os.path.join(config.RAW_DIR, "_consolidated", "income.parquet")
     inc_dir = os.path.join(config.RAW_DIR, "income")
+    all_inc = None
+    if os.path.exists(cons):
+        ci = pd.read_parquet(cons, columns=["ts_code", "end_date", "ann_date",
+                                            "total_revenue", "n_income_attr_p"])
+        all_inc = {c: g for c, g in ci.groupby("ts_code")}
     for code in codes:
-        p = os.path.join(inc_dir, f"{code}.parquet")
-        if not os.path.exists(p):
-            continue
-        try:
-            d = pd.read_parquet(p, columns=["end_date", "ann_date", "total_revenue", "n_income_attr_p"])
-        except Exception:
-            continue
-        if d.empty:
-            continue
+        if all_inc is not None:
+            d = all_inc.get(code)
+            if d is None or d.empty:
+                continue
+        else:
+            p = os.path.join(inc_dir, f"{code}.parquet")
+            if not os.path.exists(p):
+                continue
+            try:
+                d = pd.read_parquet(p, columns=["end_date", "ann_date", "total_revenue", "n_income_attr_p"])
+            except Exception:
+                continue
+            if d.empty:
+                continue
         d = d[d["end_date"].astype(str).str[4:] == "1231"]
         d = d.dropna(subset=["ann_date"]).sort_values("end_date").drop_duplicates("end_date", keep="first")
         if len(d) < 3:

@@ -37,15 +37,19 @@
 
 ## 3. §3.6 策略绩效（核心验证）
 
-| | **样本内 2012-2017** | 样本外 2017-2025 | 研报 2012-2017 |
-|---|---|---|---|
-| 年化超额收益 | **+9.5%** | **−24.5%** | +50.2% |
-| 信息比率 | **+0.64** | **−1.59** | 4.67 |
-| 最大回撤 | −20.6% | −90% | −5.9% |
+| | **样本内 5风格** | **样本内 9风格** | 样本外 2017-2025 | 研报 2012-2017 |
+|---|---|---|---|---|
+| 年化超额收益 | **+9.5%** | **+9.0%** | **−24.5%** | +50.2% |
+| 信息比率 | **+0.64** | **+0.63** | **−1.59** | 4.67 |
+| 最大回撤 | −20.6% | −20.0% | −90% | −5.9% |
 
-**分年度（样本内）**：2013 +26.1%(IR 2.17)、2014 +14.1%(IR 1.11)、2015 +23.6%(IR 0.98) 强正；
-**2016 −4.3%、2017 −5.4% 已转负**——**衰减早在 2016 就开始**，不是 2017 才突然失效。图24（in-sample
+**分年度（样本内 9风格）**：2013 +17.0%(IR 1.50)、2014 +23.5%(IR 1.95)、2015 +27.4%(IR 1.21) 强正；
+**2016 −7.6%、2017 −4.8% 已转负**——**衰减早在 2016 就开始**，不是 2017 才突然失效。图24（in-sample
 累计超额）：2013-2015 一路涨到 ~1.7，2016-2017 见顶回落。
+
+> **完整 9 风格 BARRA（EarnYield/Value/Growth/Leverage 从回补到 2005 的全历史财务算出，
+> 覆盖率 ~80-85%）几乎不改变结果（+9.0% vs +9.5%）**——见 §6，这**推翻了"幅度差距来自简化中性化"
+> 的假设**。
 
 ## 4. 机制：可交易（日内）IC 的符号翻转
 
@@ -65,18 +69,40 @@
 1. **A1 验证成功**：策略样本内为正、样本外为负——**样本外的失效是真实的 alpha 衰减，不是实现 bug**。
    单因子 |IR|、模型 IC、胜率（88.0%≈88.7%）在样本内与研报量级相当，证明管线正确。
 2. **衰减时点**：~2016 年起（样本内 2016-2017 已转负），可交易日内 IC 从 +0.016 翻到 −0.012。
-3. **量级差距（样本内 +9.5% vs 研报 +50.2%）的归因**（非反号、是幅度）：
-   - 本次 in-sample 用**简化 BARRA（仅 5 个价量风格**：Beta/动量/市值/波动/流动性；无
-     EarnYield/Value/Growth/Leverage——回补 2012-2017 财务/一致预期会触发 macOS 后台 I/O 限流，
-     代价过高）；
-   - **无卖方一致预期**、纯价量快速面板；
-   - 组合优化用本项目的 LP（ridge 预测 + ±0.1风格/±5%行业/≤5%单票），与研报的精确设置不同；
-   - 研报可能在多头侧/择时上获取了更多（其 +50% 含较强的多头有效性，2012-2015 小盘风格极利于价量）。
+3. **量级差距（样本内 +9% vs 研报 +50.2%）的归因**（非反号、是幅度）——**已用 §6 排除中性化**：
+   - ~~简化 BARRA~~ **不是原因**：完整 9 风格中性化给 +9.0%，与 5 风格 +9.5% 几乎相同（§6）。
+   - 更可能的原因：**无卖方一致预期**（研报核心输入之一）、组合优化用本项目的 LP（ridge 预测 +
+     ±0.1风格/±5%行业/≤5%单票）与研报精确设置不同、以及研报可能在多头侧/择时/参数上获取了更多
+     （其 +50% 含 2012-2015 小盘风格极利于价量的多头有效性）。
    - 这些都压低幅度，但**不改方向**——样本内盈利被复现。
 
-**一句话**：研报方法是对的、可复现的；它在 2012-2015 确实赚钱（本复现 2013-2015 年化 14%-26%），
+**一句话**：研报方法是对的、可复现的；它在 2012-2015 确实赚钱（本复现 2013-2015 年化 17%-27%），
 但这套短周期价量 alpha 的**可交易超额**在 ~2016 后衰减殆尽、2017 起转负——叠加[隔夜不可交易 +
 偏空头 + 做空成本]（见 [SUMMARY.md](SUMMARY.md)），样本外不可盈利。
+
+---
+
+## 6. 完整 9 风格 BARRA 重建（排除"简化中性化"假设）
+
+把 2012-2017 的财务**回补到全历史（income/bs/cf 到 2005）**，用完整 9 风格 CNE5S 中性化重跑
+（`GTJA_RUN_TAG=insample_full`，`panel_insample_full`）：
+
+| | 5 风格（价量） | **9 风格（完整 BARRA）** |
+|---|---|---|
+| 策略年化超额 | +9.5% / IR 0.64 | **+9.0% / IR 0.63** |
+| 单因子 \|IR\| (d2) | 2.50 | 2.63（略升，中性化更干净） |
+| 模型 IC / 胜率 | 0.102 / 88.0% | 0.102 / 87.9% |
+| 隔夜 / 日内 IC | +0.178 / +0.016 | +0.178 / +0.016 |
+
+- **完整 9 风格几乎不改变结果（+9.0% vs +9.5%）** → **量级差距（+9% vs 研报 +50%）不是中性化口径
+  造成的**。这是本次重建最有价值的结论：它**证伪**了"差距来自简化 BARRA"的假设，把归因收窄到
+  [无卖方一致预期 + LP/预测构造 + 研报特定设置]。
+- 完整 9 风格的 EarnYield/Value/Growth/Leverage 从回补的全历史财务算出（TTM 覆盖 ~80-85%；一致预期
+  描述子 EPIBS/EGIBS 因 forecast 5297 个按日文件触发 I/O 限流而跳过 → 退化为 ETOP/CETOP、SGRO/EGRO，
+  与 OOS 口径一致）。
+- **工程**：绕过 macOS 后台 I/O 限流的关键是**只读 universe 的 2455 只财务**（~7s/类，远低于限流阈值），
+  再用 `build_insample_full_panel.py` 把 TTM/point-in-time 财务并入价量面板（读 ~11 文件，60s）；
+  alpha memmap 复用（价量相同）。
 
 ## 复算
 ```bash
@@ -91,4 +117,17 @@ GTJA_RUN_TAG=insample python scripts/run_model_ic.py --universe full_a
 GTJA_RUN_TAG=insample python scripts/export_predictions.py --universe full_a
 GTJA_RUN_TAG=insample python scripts/run_strategy.py
 # 产物在 report/{tables,figures}_insample/
+
+# 完整 9 风格（§6）：财务回补全历史后
+#   分块合并（只读 universe 2455 只，避开限流）→ data/raw/_consolidated/{income,balancesheet,cashflow}.parquet
+python scripts/build_insample_full_panel.py                # → panel_insample_full（读11文件,60s）
+cp -r report/cache_insample/signals_full_a_cross_section report/cache_insample_full/   # 复用 alpha memmap
+export GTJA_RUN_TAG=insample_full
+python scripts/compute_barra.py --universe full_a          # 9 风格（含回补财务）
+python scripts/run_single_factor_test.py --universe full_a
+python scripts/make_report.py
+python scripts/run_model_ic.py --universe full_a
+python scripts/export_predictions.py --universe full_a
+python scripts/run_strategy.py
+# 产物在 report/{tables,figures}_insample_full/
 ```

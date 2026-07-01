@@ -1,5 +1,4 @@
 *.log
 .DS_Store
 __pycache__/
-report/cache/
-report/cache_insample/
+report/cache*/

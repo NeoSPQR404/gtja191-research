@@ -9,6 +9,7 @@ Reproduction of 国泰君安《数量化专题之九十三：基于短周期价�
 > **🔬 样本内对照见 [INSAMPLE_VS_OOS.md](INSAMPLE_VS_OOS.md)（A1）** — 把同一管线放回研报
 > 2012-2017 窗口：策略转正 **+9.5%/IR 0.64**（样本外 −24.5%），胜率 88.0%≈研报 88.7% →
 > **证实样本外失效是真实 alpha 衰减（~2016 起），非实现 bug**；可交易日内 IC 翻号 +0.016→−0.012。
+> 财务回补全历史后的**完整 9 风格 BARRA 给 +9.0%≈5 风格 +9.5%**，证伪了"差距来自简化中性化"。
 
 * **Reference**: `../gtja191-reference/` — the report PDF + MSCI *Barra CNE5S Model
   Descriptor* (descriptor weights).
