@@ -83,7 +83,7 @@ def main():
     best = tab["净IR"].idxmax()
     tab.round(3).to_csv(os.path.join(config.TABLE_DIR, "holding_period.csv"))
     with open(os.path.join(config.TABLE_DIR, "holding_period.md"), "w") as f:
-        f.write("### §3.6 IC衰减与最优持有期 (开盘→开盘, 十分位多空, 2017-2025)\n\n")
+        f.write(f"### §3.6 IC衰减与最优持有期 (开盘→开盘, 十分位多空, {config.WINDOW_LABEL})\n\n")
         f.write(tab.round(3).to_markdown() + f"\n\n_最优持有期 = **{best} 天**（净IR 最大 "
                 f"{tab.loc[best, '净IR']:.2f}, 年化 {tab.loc[best, '年化净收益']*100:.0f}%)_\n")
 

@@ -186,7 +186,7 @@ def main():
         fmt[c] = (tab[c] * 100).round(1).astype(str) + "%"
     fmt["IR"] = tab["IR"].round(2); fmt["年化双边换手"] = tab["年化双边换手"].round(0).astype(int).astype(str) + "倍"
     with open(os.path.join(config.TABLE_DIR, "market_neutral.md"), "w") as f:
-        f.write("### §3.6 市场中性多空 — 换手率上限对比 (h=7, 开盘→开盘, 可融券口径, 2017-2025)\n\n")
+        f.write(f"### §3.6 市场中性多空 — 换手率上限对比 (h=7, 开盘→开盘, 可融券口径, {config.WINDOW_LABEL})\n\n")
         f.write("_单次单腿换手上限; 通过向新 decile 部分移动实现_\n\n")
         f.write(fmt.to_markdown() + "\n")
 
@@ -234,7 +234,7 @@ def main():
         index=["年化收益", "年化波动", "夏普/IR", "最大回撤", "日胜率"])
     cmp.to_csv(os.path.join(config.TABLE_DIR, "market_neutral_best.csv"))
     with open(os.path.join(config.TABLE_DIR, "market_neutral_best.md"), "w") as f:
-        f.write(f"### 收益最高换手档 ({best_name}) 市场中性多空 vs 中证500 (2017-2025)\n\n")
+        f.write(f"### 收益最高换手档 ({best_name}) 市场中性多空 vs 中证500 ({config.WINDOW_LABEL})\n\n")
         f.write(cmp.to_markdown() + f"\n\n_与中证500 日收益相关性 = {corr:+.2f}（≈0 = 市场中性）_\n")
 
     fig, ax = plt.subplots(figsize=(11, 4.8))
@@ -262,7 +262,7 @@ def main():
     nbest = max(nresults, key=lambda r: r[3])[0]          # neutral, by IR
     nb = nnavs[nbest]; ns = stats(nb); ncorr = nb["ls_ret"].corr(nb["mkt_ret"])
     with open(os.path.join(config.TABLE_DIR, "market_neutral_neutralized.md"), "w") as f:
-        f.write("### B3 多空腿风格/行业中性化 vs 裸 decile (h=7, 开盘→开盘, 2017-2025)\n\n")
+        f.write(f"### B3 多空腿风格/行业中性化 vs 裸 decile (h=7, 开盘→开盘, {config.WINDOW_LABEL})\n\n")
         f.write(cdf.to_markdown() + "\n\n")
         f.write(f"_中性化把净风格敞口压到≈0（裸 ~{expos['≤10%']:.2f} → 中性 ~{nexpos['≤10%']:.3f}）；"
                 f"最优中性档 {nbest}：年化{ns['ann']*100:+.1f}% IR{ns['ir']:.2f} 回撤{ns['mdd']*100:.0f}% "
@@ -297,11 +297,13 @@ def main():
     bdf = pd.DataFrame([(f"{r*100:.2f}%", f"{a*100:+.1f}%", f"{i:.2f}", f"{m*100:.1f}%") for r, a, i, m in brows],
                        columns=["融券费率(年化)", "年化净收益", "IR", "最大回撤"]).set_index("融券费率(年化)")
     bdf.to_csv(os.path.join(config.TABLE_DIR, "market_neutral_borrow.csv"))
+    net835 = gross_ann - 0.0835
+    verdict = ("策略仍为正" if net835 > 0 else "策略转负")
     with open(os.path.join(config.TABLE_DIR, "market_neutral_borrow.md"), "w") as f:
-        f.write(f"### C1 融券成本敏感性（最优中性档 {nbest}, h=7, 2017-2025）\n\n")
+        f.write(f"### C1 融券成本敏感性（最优中性档 {nbest}, h=7, {config.WINDOW_LABEL}）\n\n")
         f.write(bdf.to_markdown() + f"\n\n_毛收益(未计融券)≈{gross_ann*100:+.1f}%/年 → "
-                f"盈亏平衡融券费率≈{gross_ann*100:.1f}%；而官方融券费率≈8.35%（难借小票更高）"
-                f"→ 计入融券后净收益≈{(gross_ann-0.0835)*100:.1f}%/年，策略转负_\n")
+                f"盈亏平衡融券费率≈{gross_ann*100:.1f}%（{'>' if net835>0 else '<'}官方 8.35%）"
+                f"→ 计入官方 8.35% 融券后净收益≈{net835*100:+.1f}%/年，{verdict}_\n")
 
     fig, ax1 = plt.subplots(figsize=(9, 4.6))
     rr = [r * 100 for r, _, _, _ in brows]
@@ -314,7 +316,8 @@ def main():
     ax1.annotate("官方融券费率 8.35%", (8.35, 0), textcoords="offset points", xytext=(6, -28), fontsize=10, color=RED)
     ax2 = ax1.twinx(); ax2.plot(rr, [i for _, _, i, _ in brows], color=GREY, marker="s", lw=1.5, label="IR")
     ax2.set_ylabel("IR", color=GREY)
-    ax1.set_title(f"图35 融券成本敏感性（最优中性档{nbest}）: 盈亏平衡费率仅≈{gross_ann*100:.1f}% << 8.35%")
+    _rel = f"{gross_ann*100:.1f}% > 官方8.35% → 净仍为正" if net835 > 0 else f"仅≈{gross_ann*100:.1f}% << 8.35% → 转负"
+    ax1.set_title(f"图35 融券成本敏感性（最优中性档{nbest}, {config.WINDOW_LABEL}）: 盈亏平衡{_rel}")
     fig.tight_layout(); fig.savefig(os.path.join(config.FIGURE_DIR, "fig35_borrow_cost.png"), dpi=130, bbox_inches="tight"); plt.close(fig)
 
     print(fmt.to_string()); print(f"\n拐点(IR最大) = {labels[best_i]}  IR={irs[best_i]:.2f}  年化={anns[best_i]:.1f}%")

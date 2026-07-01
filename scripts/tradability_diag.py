@@ -80,7 +80,7 @@ def main():
 
     tab = pd.DataFrame(rows, columns=["组合", "年化收益", "IR"]).set_index("组合")
     with open(os.path.join(config.TABLE_DIR, "tradability.md"), "w") as f:
-        f.write("### §3.6 可交易性诊断 (开盘→开盘执行, 2017-2025)\n\n")
+        f.write(f"### §3.6 可交易性诊断 (开盘→开盘执行, {config.WINDOW_LABEL})\n\n")
         f.write("_多空毛 IR 衡量信号强度; 多头扣费超额衡量长仓实际可得_\n\n")
         f.write(tab.assign(年化收益=lambda d: (d["年化收益"] * 100).round(1).astype(str) + "%",
                            IR=lambda d: d["IR"].round(2)).to_markdown() + "\n")

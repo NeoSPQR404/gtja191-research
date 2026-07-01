@@ -77,9 +77,9 @@ def main():
     with open(os.path.join(config.TABLE_DIR, "overnight_ceiling.md"), "w") as f:
         f.write("### 研究延伸：隔夜 alpha 理论上限（同一 Ê，三执行窗口的十分位多空毛收益）\n\n")
         f.write(tab.to_markdown() + "\n\n")
-        f.write(f"_递减阶梯：隔夜理论上限 ≈{over*100:.0f}%/年（不可交易）→ 开盘→开盘可交易毛 "
-                f"≈{tradable*100:.0f}%/年 → 计入风格中性+换手成本毛 ≈+1.2% → 计入官方融券 8.35% 后 "
-                f"≈−7%/年。研报所谓\"冰山一角\"：水下(隔夜)巨大但摸不到，水上(可交易净)为负。_\n")
+        f.write(f"_递减阶梯（{config.WINDOW_LABEL}）：隔夜理论上限 ≈{over*100:.0f}%/年（不可交易）→ "
+                f"开盘→开盘可交易毛 ≈{tradable*100:.0f}%/年 → 经风格中性+换手上限+融券成本后见市场中性"
+                f"回测（图30-35）。研报所谓\"冰山一角\"：水下(隔夜)巨大但摸不到。_\n")
 
     # fig36: cumulative NAV — overnight ceiling vs tradable (log scale)
     fig, ax = plt.subplots(figsize=(11, 4.8))
@@ -97,7 +97,7 @@ def main():
     ax.legend(loc="upper left", fontsize=9); ax.grid(alpha=0.25)
     fig.tight_layout(); fig.savefig(os.path.join(config.FIGURE_DIR, "fig36_overnight_ceiling.png"), dpi=130, bbox_inches="tight"); plt.close(fig)
     print(tab.to_string())
-    print(f"\n阶梯: 隔夜上限{over*100:+.0f}% → 开→开毛{tradable*100:+.0f}% → 中性+换手毛+1.2% → 计融券净≈-7%")
+    print(f"\n阶梯: 隔夜上限{over*100:+.0f}% → 开→开毛{tradable*100:+.0f}% → 见 market_neutral 的中性+换手+融券净")
 
 
 if __name__ == "__main__":

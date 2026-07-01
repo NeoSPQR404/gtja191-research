@@ -290,13 +290,48 @@ P("局限与可继续方向：样本外窗口是反号主因(如需样本内对�
   "空头依赖融券标的与成本(未计融券利息)；可继续——计入融券成本的净空头收益 / 小微盘活跃年条件配置 / "
   "把隔夜alpha单列为学术口径隔夜策略量化其上限。")
 
+# ============================================================= A1 in-sample validation
+def fig_is(name, caption, max_h=None):
+    path = os.path.join(ROOT, "report", "figures_insample_full", name)
+    if not os.path.exists(path):
+        return
+    iw, ih = PILImage.open(path).size
+    w = CW; h = w * ih / iw
+    if max_h and h > max_h:
+        h = max_h; w = h * iw / ih
+    story.append(KeepTogether([Image(path, width=w, height=h), Paragraph(caption, S["cap"])]))
+
+
+story.append(PageBreak())
+P("7. A1 样本内验证（2012-2017）：同一管线放回研报窗口", "h1")
+P("把回补的完整数据放回研报 2012-2017 窗口、用<b>完整 9 风格 BARRA</b>跑同一管线（工程上绕开 macOS I/O "
+  "限流：只读 universe 财务 + 复用 alpha memmap）。<b>核心结论：同一套构造，样本内赚钱、样本外亏 → "
+  "证实样本外失效是真实的 alpha 衰减、~2016 起，而非实现 bug。</b>", "body")
+table_from_rows([
+    ["指标", "样本内 2012-2017", "样本外 2017-2025", "研报"],
+    ["策略年化超额 / IR", "+9.0% / 0.63", "−24.5% / −1.59", "+50.2% / 4.67"],
+    ["模型IC / 日度胜率", "0.102 / 88.0%", "0.115 / 95.1%", "0.057 / 88.7%"],
+    ["单因子 |IR|(d2)", "2.63", "2.08", "2.11"],
+    ["市场中性(≤40%档) 毛/IR", "+12.0% / 2.19", "+0.9% / 0.14", "—"],
+    ["计入官方8.35%融券后净", "+3.6% / 0.66 ✓", "−7.1% / −2.56 ✗", "—"],
+    ["市场中性 夏普 / 回撤", "1.75 / −6%", "0.55 / −16%", "—"],
+], colw=[CW * 0.30, CW * 0.24, CW * 0.24, CW * 0.22], font=8.2)
+P("<b>决定性一条（表 §7c）</b>：样本内市场中性毛收益 +12% 远高于融券盈亏平衡（~12% > 官方 8.35%），"
+  "<b>计入官方融券后仍净赚 +3.6%/年（IR 0.66）</b>；样本外毛 edge 仅 +1.2%，扛不住做空成本 → −7%。"
+  "同一策略、同一成本假设，<b>样本内可盈利、样本外不可</b>——alpha 真实衰减最硬的证据。", "body")
+fig_is("fig33_best_vs_benchmark.png", "图A1-1 样本内市场中性多空 vs 中证500：同等收益(+16% vs +17%)、"
+       "1/3 波动、1/9 回撤(−6% vs −55%)、3× 夏普、近零相关(+0.11)", max_h=200)
+fig_is("fig24_excess.png", "图A1-2 样本内组合累计超额（2012-2015 涨到 ~1.7，2016-2017 见顶回落=衰减起点）", max_h=175)
+P("完整 9 风格 BARRA 给 +9.0%，与 5 风格 +9.5% 几乎相同 → <b>证伪了“样本内 +9% vs 研报 +50% 差距来自"
+  "简化中性化”的假设</b>；差距收窄到 [无卖方一致预期 + LP/预测构造 + 研报特定设置]。详见 INSAMPLE_VS_OOS.md。", "body")
+
 doc = SimpleDocTemplate(OUT, pagesize=A4, leftMargin=LM, rightMargin=RM, topMargin=14 * mm, bottomMargin=14 * mm,
                         title="GTJA191 复现报告", author="quant research")
 
 
 def footer(canvas, d):
     canvas.saveState(); canvas.setFont(F, 8); canvas.setFillColor(GREY)
-    canvas.drawCentredString(PW / 2, 8 * mm, f"GTJA191 价量多因子体系复现报告（样本外 2017–2025）  ·  第 {d.page} 页")
+    canvas.drawCentredString(PW / 2, 8 * mm, f"GTJA191 价量多因子体系复现报告（§3.3–§3.6 + A1 样本内验证）  ·  第 {d.page} 页")
     canvas.restoreState()
 
 
