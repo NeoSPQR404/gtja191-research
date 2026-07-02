@@ -64,8 +64,14 @@ def load_industry():
 
 
 def select_universe(panel, basic):
-    """full_a: all stocks with >= MIN_HISTORY_DAYS history, ex-ST.
-    topN: additionally restrict to the top UNIVERSE_SIZE by median daily amount."""
+    """full_a: all stocks with >= MIN_HISTORY_DAYS history, ex-ST, ex-北交所(.BJ).
+    topN: additionally restrict to the top UNIVERSE_SIZE by median daily amount.
+
+    北交所 (Beijing Stock Exchange, ``.BJ``) is excluded: it opened 2021-11 so its
+    pre-2021 daily records are back-filled placeholders (open=0.01 while pre_close /
+    close are normal), which explode open-to-open returns to 1000x+ and corrupt the
+    equal-weight decile diagnostics (esp. the 2012-2017 in-sample window). The
+    report's "全A" universe is SSE+SZSE anyway (BSE did not exist during the study)."""
     name = basic.set_index("ts_code")["name"].fillna("")
     is_st = name.apply(lambda s: any(m in s for m in config.ST_MARKERS))
     st_codes = set(name.index[is_st])
@@ -73,6 +79,7 @@ def select_universe(panel, basic):
     grp = panel.groupby("ts_code")
     nobs = grp.size()
     eligible = set(nobs.index[nobs >= config.MIN_HISTORY_DAYS]) - st_codes
+    eligible = {c for c in eligible if not str(c).endswith(".BJ")}   # ex-北交所
 
     if config.UNIVERSE_MODE == "topN":
         med_amt = grp["amount"].median()

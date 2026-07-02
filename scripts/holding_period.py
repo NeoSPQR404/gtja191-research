@@ -47,10 +47,15 @@ def main():
 
     rows = []
     for h in HS:
-        # h-day open-to-open return aligned to decision day t (exec t+1 -> exit t+1+h)
+        # h-day open-to-open return aligned to decision day t (exec t+1 -> exit t+1+h).
+        # Backstop winsorise per-stock at ±(1.22^h − 1): the max plausible from h
+        # consecutive all-board daily-limit moves (±20% + buffer). This never touches a
+        # legitimate 次新股 limit run but caps data glitches (e.g. the .BJ open=0.01
+        # placeholders, now also excluded by select_universe) that dominate the decile.
+        cap = 1.22 ** h - 1.0
         oo = np.full((T, len(codes)), np.nan)
         if 1 + h < T:
-            oo[:T - (1 + h)] = opn[1 + h:] / opn[1:T - h] - 1.0
+            oo[:T - (1 + h)] = np.clip(opn[1 + h:] / opn[1:T - h] - 1.0, -cap, cap)
         # IC decay (overlapping, all t)
         ics = []
         for j in range(T - (1 + h)):

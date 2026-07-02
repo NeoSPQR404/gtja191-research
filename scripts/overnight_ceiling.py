@@ -60,7 +60,12 @@ def main():
             m = np.isfinite(x) & np.isfinite(r) & (np.nan_to_num(a) > 0)
             if m.sum() < 200:
                 continue
-            xs = pd.Series(x[m]); rk = xs.rank(pct=True).to_numpy(); rr = r[m]
+            # backstop winsorise per-stock at ±22% (all-board daily limit ±20% + buffer;
+            # covers 创业板/科创板). The real fix is .BJ exclusion in select_universe;
+            # this only caps impossible glitches (e.g. adj discontinuities) that would
+            # blow up the equal-weight decile, and is verified not to touch the signal
+            # (identical IR to no-clip once .BJ is excluded).
+            xs = pd.Series(x[m]); rk = xs.rank(pct=True).to_numpy(); rr = np.clip(r[m], -0.22, 0.22)
             out[j] = rr[rk > 0.9].mean() - rr[rk < 0.1].mean()
         return pd.Series(out, index=dates)
 

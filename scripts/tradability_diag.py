@@ -44,7 +44,11 @@ def main():
     amt = p.pivot(index="trade_date", columns="ts_code", values="amount").reindex(dates, axis=0).reindex(codes, axis=1)
     pw = pd.read_parquet(config.CACHE_DIR + "/alpha_pred_full_a.parquet").pivot(
         index="trade_date", columns="ts_code", values="pred").reindex(dates, axis=0).reindex(codes, axis=1)
-    oo = op.shift(-SP) / op.shift(-1) - 1.0                      # open_{j+1} -> open_{j+SP}
+    # open_{j+1} -> open_{j+SP} (1-day hold); backstop winsorise per-stock at ±22%
+    # (all-board daily limit ±20% + buffer). The real fix is .BJ exclusion in
+    # select_universe; this only caps impossible glitches that blow up the equal-weight
+    # decile / top-N mean (see data_loader.select_universe .BJ note).
+    oo = (op.shift(-SP) / op.shift(-1) - 1.0).clip(-0.22, 0.22)
     csi = pd.read_parquet(config.CSI500_RAW); csi["trade_date"] = csi.trade_date.astype(str)
     bo = csi.set_index("trade_date")["open"].reindex(dates).astype(float)
     bench_oo = bo.shift(-SP) / bo.shift(-1) - 1.0

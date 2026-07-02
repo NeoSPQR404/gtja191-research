@@ -106,7 +106,8 @@ python scripts/run_alphas.py --rank cross_section --universe full_a
   open-to-open IR +4.56 ≈ the report's 4.67** (fig28) — the signal strength IS
   reproduced OOS. It's just **short-sided** (identifies losers > winners), so a
   long-only book (the report's construction, A-share short constraint) can't capture
-  it: top-N long-only after cost is −12% to −42%, and the neutralized optimizer −24.5%.
+  it: top-N long-only after cost is −29% to −48% (universe now ex-北交所 `.BJ`; the old
+  −12% top50 was propped up by `.BJ` names), and the neutralized optimizer −24.5%.
   The signal lives in (overnight + short side), not in (long-only tradable cross-
   section). (next-open split-day execution ≡ open-to-open for a 2-day hold, so both
   give −24.5%.) Tables 11/12 + Figs 23-28. (Tc sweep §3.6.3 degenerate; `--sweep`.)
