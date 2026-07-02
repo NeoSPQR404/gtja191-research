@@ -5,6 +5,7 @@ in-sample (2012-2017, full 9-style) versions stacked, with a four-part commentar
 含义 / 样本外读数 / 样本内读数 / 对比结论. Output report/GTJA191_图表分析报告.pdf.
 """
 import os
+import csv as _csv
 from PIL import Image as PILImage
 from reportlab.lib import colors
 from reportlab.lib.pagesizes import A4
@@ -75,18 +76,63 @@ def entry(fname, title, meaning, oos, ins, compare, star=False, mh=150):
     P(f"<b>【对比结论】</b>{compare}")
 
 
+TAB_OOS = os.path.join(ROOT, "report", "tables")
+TAB_IS = os.path.join(ROOT, "report", "tables_insample_full")
+
+
+def _rows(fname, is_sample=False):
+    d = TAB_IS if is_sample else TAB_OOS
+    with open(os.path.join(d, fname), encoding="utf-8") as f:
+        rows = [r for r in _csv.reader(f)]
+    if is_sample:                                  # fix a stale label in the in-sample CSVs
+        rows = [[c.replace("2017-2025", "2012-2017") for c in r] for r in rows]
+    return rows
+
+
+def _mktable(rows, font=8.2, first_frac=0.32):
+    ncol = max(len(r) for r in rows)
+    rows = [r + [""] * (ncol - len(r)) for r in rows]
+    colw = [CW * first_frac] + [CW * (1 - first_frac) / (ncol - 1)] * (ncol - 1)
+    data = [[Paragraph(str(c) if c != "" else "&nbsp;",
+             ParagraphStyle("c", fontName=F, fontSize=font, leading=font + 2,
+                            alignment=TA_LEFT if j == 0 else TA_CENTER)) for j, c in enumerate(r)]
+            for r in rows]
+    t = Table(data, colWidths=colw, hAlign="LEFT")
+    t.setStyle(TableStyle([("FONTNAME", (0, 0), (-1, -1), F), ("FONTSIZE", (0, 0), (-1, -1), font),
+                           ("GRID", (0, 0), (-1, -1), 0.4, colors.HexColor("#cccccc")), ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+                           ("TOPPADDING", (0, 0), (-1, -1), 2.5), ("BOTTOMPADDING", (0, 0), (-1, -1), 2.5),
+                           ("BACKGROUND", (0, 0), (-1, 0), NAVY), ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
+                           ("BACKGROUND", (0, 1), (-1, -1), colors.HexColor("#f7f9fb"))]))
+    return t
+
+
+def tbl(fname, title, meaning, oos, ins, compare, font=8.2, first_frac=0.32, section_start=False, fname_is=None):
+    if section_start:
+        story.append(PageBreak())
+    P("▦ " + title, "h1")
+    P(f"<b>【表格含义】</b>{meaning}")
+    blk = [_mktable(_rows(fname), font, first_frac),
+           Paragraph("▲ 样本外 2017-2025（out-of-sample）", S["lab"]), Spacer(1, 5),
+           _mktable(_rows(fname_is or fname, is_sample=True), font, first_frac),
+           Paragraph("▲ 样本内 2012-2017（in-sample, 完整9风格）", S["lab"])]
+    story.append(KeepTogether(blk)); story.append(Spacer(1, 4))
+    P(f"<b>【样本外读数】</b>{oos}")
+    P(f"<b>【样本内读数】</b>{ins}")
+    P(f"<b>【对比结论】</b>{compare}")
+
+
 # ---------------------------------------------------------------- cover
 P("GTJA191 价量多因子体系 — 图表分析报告", "title")
 P("每张图逐一配详细说明 · 样本外(2017-2025) vs 样本内(2012-2017, 完整9风格) 对照", "sub")
 P("国泰君安《数量化专题之九十三》复现 · 全A非ST · 189/191 价量Alpha · BARRA CNE5S 中性化 · tushare 数据", "sub")
 story.append(Spacer(1, 8))
-callout("<b>阅读指引：</b>本报告把复现产出的 19 张图逐一列出，每张给出 OOS 与样本内两个版本 + 四段说明"
-        "（含义 / 样本外读数 / 样本内读数 / 对比结论）。<b>贯穿主线：</b>因子显著性(|IR|、模型IC)在两窗都"
-        "与研报量级相当；但<b>可落地的超额收益样本内为正、样本外为负</b>——根因是价量 alpha 的预测力落在"
-        "不可交易的隔夜跳空 + 偏空头，且信号在 ~2016 后衰减。★ 标记的 4 张图（27/33/35/36）是核心。",
+callout("<b>阅读指引：</b>本报告把复现产出的 <b>19 张图 + 8 张关键表格</b>逐一列出，每项给出 OOS 与样本内"
+        "两个版本 + 四段说明（含义 / 样本外读数 / 样本内读数 / 对比结论）。<b>贯穿主线：</b>因子显著性"
+        "(|IR|、模型IC)在两窗都与研报量级相当；但<b>可落地的超额收益样本内为正、样本外为负</b>——根因是价量 "
+        "alpha 的预测力落在不可交易的隔夜跳空 + 偏空头，且信号在 ~2016 后衰减。★ 标记的图/表是核心。",
         colors.HexColor("#eef3f8"))
-P("图表分组：§3.4.1 单因子检验(图9-20) · §3.4.2/3 模型IC(图21-22) · §3.6 策略回测(图23-25) · "
-  "§3.6 实战深挖(图27-36)。", "body")
+P("分组：§3.4.1 单因子(图9-20 + 表7/8) · §3.4.2/3 模型IC(图21-22 + 表9/10) · §3.6 策略回测"
+  "(图23-25 + 表11/12) · §3.6 实战深挖(图27-36 + 表 融券成本/最优中性档)。", "body")
 
 # ---------------------------------------------------------------- §3.4.1
 P("一、§3.4.1 单因子有效性与有效周期检验", "h1")
@@ -115,6 +161,18 @@ entry("fig20_corr_dist.png", "图20 因子收益率两两相关系数分布（�
       "本复现的因子相关性明显高于研报——可能源于因子定义/算子实现口径差异 + 样本外效应；这也是后续"
       "组合模型改用岭回归（而非研报 OLS）的原因（高共线下 OLS 发散）。")
 
+# --- §3.4.1 配套表格 ---
+tbl("table7_mean_factor_return.csv", "表7 单因子年化收益率(FR)均值 · 按预测周期 d=1..5",
+    "各预测周期(d=1..5)下、全体有效因子的<b>带符号</b>平均年化因子收益率；末行为研报对照。",
+    "各周期均在 0 附近略偏负(−0.43%~−0.64%)，远离研报 +4.8%~+8.1%——因子原始方向在样本外整体失效。",
+    "除 d1(+0.69%)外亦贴近 0(−0.44%~−0.57%)——即便样本内，带符号因子收益也不高。",
+    "两窗带符号 FR 都≈0（异于研报），因子方向在两窗都不稳定；真正的显著性要看 |IR|（表8）。", first_frac=0.40, section_start=True)
+tbl("table8_mean_IR.csv", "表8 单因子信息比率(IR)均值 · 按预测周期 d=1..5",
+    "各周期下的 IR 均值：signed(带符号)、abs(<b>|IR|</b>，衡量显著性)，末行研报对照。",
+    "|IR| 从 d1 的 2.25 单调降到 d5 的 1.78；signed≈0——显著但符号发散。",
+    "|IR| d2-5 为 2.26~2.63（d1 0.70 异常偏低）；量级更高。",
+    "两窗 |IR| 都与研报(2.57→1.05)同量级且随周期衰减——<b>因子显著性被稳健复现</b>；signed≈0 印证“显著但符号不可靠”。", first_frac=0.40)
+
 # ---------------------------------------------------------------- §3.4.2/3
 P("二、§3.4.2 / §3.4.3 组合 Alpha 模型的预测能力", "h1")
 entry("fig21_model_ic.png", "图21 组合模型预测系数 (IC of Alpha Model) 时序",
@@ -129,6 +187,18 @@ entry("fig22_factor_count.png", "图22 因子个数与模型预测能力的关�
       "模型 IC 随因子数 <b>单调递增、边际递减</b>：0.090(20只)→0.115(170只)。",
       "同样单调递增、边际递减：0.073(20只)→0.102(170只)。",
       "两窗都复现研报 §3.4.3 的结论——加因子持续提升预测力但边际递减，说明因子体系尚未触及预测边界。")
+
+# --- §3.4.2/3 配套表格 ---
+tbl("table9_model_ic.csv", "表9 组合模型日度 IC · 均值 / t 统计量 / 胜率",
+    "组合 Alpha 模型的<b>日度截面 IC 均值</b>、t 统计量、日胜率，末行研报对照。",
+    "IC <b>0.115</b>、t 65.8、胜率 <b>95.1%</b>——远超研报(0.057 / 18.2 / 88.7%)。",
+    "IC <b>0.102</b>、t 38.9、胜率 <b>87.9%</b>（≈研报 88.7%）。",
+    "两窗模型 IC 都高且稳定为正、胜率≈研报——收盘对收盘预测力强。但此高 IC 被<b>隔夜跳空主导、不可落地</b>（图27/36），是全报告最大的“陷阱”。", first_frac=0.42, section_start=True)
+tbl("table10_factor_count.csv", "表10 因子个数与模型预测能力",
+    "按 |IR| 排序纳入的因子数(20→170)对应的<b>模型 IC 与 t</b>——研报 §3.4.3。",
+    "IC 随因子数单调递增、边际递减：0.090(20只)→0.115(170只)。",
+    "同样单调递增、边际递减：0.071(20只)→0.102(170只)。",
+    "两窗都复现“加因子持续提升预测力但边际递减”——因子体系尚未触及预测边界。", first_frac=0.34)
 
 # ---------------------------------------------------------------- §3.6 strategy
 P("三、§3.6 风格中性多因子选股策略（长仓组合优化回测）", "h1")
@@ -147,6 +217,18 @@ entry("fig25_turnover.png", "图25 组合单次换仓比率",
       "单次双边换手 ~75%、年化 ~94 倍——很高。",
       "单次双边换手 ~88%、年化 ~111 倍——同样很高。",
       "两窗换手都远高于研报（单次 38%、年化 48 倍）；高换手→高成本，是后续要用“换手上限”优化的动因（图31/32）。")
+
+# --- §3.6 长仓策略 配套表格 ---
+tbl("table11_strategy_perf.csv", "表11 长仓组合优化策略绩效 · 复现 vs 研报",
+    "风格/行业中性长仓组合的年化超额、信息比率、最大回撤、换手、平均持仓，与研报对照。",
+    "年化超额 <b>−24.5%</b> / IR −1.59 / 回撤 −90%——完全失效（研报 +50.2% / 4.67 / −5.9%）。",
+    "年化超额 <b>+9.0%</b> / IR 0.63 / 回撤 −20%——转正。",
+    "同一构造样本内赚、样本外亏；两窗换手都远高于研报(48倍)——高成本是后续换手优化(图31/32)的动因。", first_frac=0.34, section_start=True)
+tbl("table12_yearly.csv", "表12 长仓策略分年度绩效",
+    "策略逐年的年化超额收益 / 信息比率 / 最大回撤。",
+    "2017-2025 除 2024(+5.0%)外全年为负，2022 最差(−57.5%)——样本外系统性失效。",
+    "<b>2013(+17%)/2014(+23%)/2015(+27%) 强，2016(−7.6%)/2017(−4.8%)转负</b>。",
+    "样本内在 <b>2016 见顶转负</b>——衰减起点 ~2016、非 2017 突变（呼应图24 的见顶回落）。", first_frac=0.22)
 
 # ---------------------------------------------------------------- §3.6 deep-dive
 P("四、§3.6 实战可交易性深挖（核心）", "h1")
@@ -215,9 +297,21 @@ entry("fig36_overnight_ceiling.png", "图36 交易型 alpha 的“冰山”：�
       ".BJ（研报“全A”本就沪深两市）+ ±22% 兜底缩尾 → IR 0.45→<b>7.05</b>，证明信号本就强、震荡纯属数据毛刺；"
       "样本外未受污染（其 .BJ 为 2021 后真实数据）。", star=True, mh=210)
 
+# --- §3.6 深挖 配套表格 ---
+tbl("market_neutral_borrow.csv", "★ 融券成本敏感性 · 市场中性最优档（图35 的数值版）",
+    "最优中性档在不同<b>融券费率</b>下的年化净收益 / IR / 最大回撤；核心看官方 8.35%。",
+    "盈亏平衡费率仅 ~1.2% ≪ 8.35% → 8.35% 时 <b>−7.1% / IR −2.56（转负）</b>。",
+    "盈亏平衡费率 ~12% > 8.35% → 8.35% 时 <b>+3.6% / IR 0.66（仍为正）</b>。",
+    "<b>决定性分水岭</b>：同一策略、同一 8.35% 融券成本——样本内扣完仍赚、样本外亏。这是 alpha 真实衰减最硬的证据。", first_frac=0.28, section_start=True)
+tbl("market_neutral_best.csv", "最优换手档 市场中性多空 vs 中证500（图33 的数值版）",
+    "收益最优换手档的市场中性多空与基准中证500 的年化收益 / 波动 / 夏普 / 回撤 / 日胜率。",
+    "中性 +1.4% / 波动 6.6% / 回撤 −16%——低波动但<b>绝对收益薄</b>。",
+    "中性 <b>+16.0% / 波动 9.1% / 回撤 −6%</b>（指数 +17.3% / 31.5% / −54.6%）。",
+    "样本内是<b>优秀的市场中性产品</b>：同等收益、1/3 波动、1/9 回撤、3× 夏普；样本外只剩“低波动没收益”。", first_frac=0.34)
+
 # ---------------------------------------------------------------- summary
 story.append(PageBreak())
-P("五、总览：19 张图串起的一条主线", "h1")
+P("五、总览：19 图 + 8 表串起的一条主线", "h1")
 callout("① 因子显著性(图19 |IR|、图21-22 模型IC/胜率88%)在两窗都与研报量级相当 → 管线正确、方法可复现。<br/>"
         "② 但图27 揭示高 IC 被<b>不可交易的隔夜跳空</b>主导；图28/30 显示信号偏<b>空头</b>、长仓拿不到。<br/>"
         "③ 图29 定最优持有 7 天、图31-32 定换手拐点、图34 做风格中性——把可交易信号榨到最净。<br/>"
